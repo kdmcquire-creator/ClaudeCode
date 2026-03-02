@@ -95,9 +95,9 @@ function ruleMatches(rule: Rule, tx: {
 
 function isPersonalTripDate(db: Database.Database, date: string): boolean {
   const trips = db.prepare('SELECT * FROM personal_trip_dates').all() as {
-    start_date: string; end_date: string
+    date_from: string; date_to: string
   }[]
-  return trips.some(t => date >= t.start_date && date <= t.end_date)
+  return trips.some(t => date >= t.date_from && date <= t.date_to)
 }
 
 export function classifyTransaction(

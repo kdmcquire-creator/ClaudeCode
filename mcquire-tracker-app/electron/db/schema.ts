@@ -183,7 +183,8 @@ export function seedDefaultSettings(db: Database.Database): void {
     review_email_threshold: '1',
     last_backup_date: '',
     expense_report_period_label: 'December 2025 – February 2026',
-    peak10_already_reimbursed_through: '2025-11-30'
+    peak10_already_reimbursed_through: '2025-11-30',
+    plaid_env: 'development'
   }
   const upsert = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)')
   for (const [k, v] of Object.entries(defaults)) {

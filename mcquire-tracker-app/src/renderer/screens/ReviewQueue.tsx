@@ -70,6 +70,7 @@ export default function ReviewQueue({ onPendingChange }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [classifyState, setClassifyState] = useState<Record<string, any>>({})
   const [splitState, setSplitState] = useState<Record<string, { a1: string; a2: string; showSplit: boolean }>>({})
+  const [attAmt, setAttAmt] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<Record<string, boolean>>({})
   const [filterStatus, setFilterStatus] = useState<"all" | "pending_review" | "flagged">("all")
 
@@ -164,6 +165,31 @@ export default function ReviewQueue({ onPendingChange }: Props) {
         { amount: a2, bucket: cs.splitBucket ?? "Personal", description_notes: cs.splitNotes ?? "" },
       ])
       setTransactions(prev => prev.filter(t => t.id !== tx.id))
+    } catch (e: any) {
+      alert("Split error: " + (e?.message ?? "unknown"))
+    } finally {
+      setSaving(prev => ({ ...prev, [tx.id]: false }))
+    }
+  }
+
+  const isAttSplit = (tx: any) =>
+    tx.flag_reason?.toLowerCase().includes('at&t') && Math.abs(tx.amount) >= 300
+
+  const handleAttSplit = async (tx: any) => {
+    const p10Amount = parseFloat(attAmt[tx.id] ?? "")
+    if (isNaN(p10Amount) || p10Amount <= 0 || p10Amount >= Math.abs(tx.amount)) {
+      alert("Enter a valid Peak 10 business line cost less than the total.")
+      return
+    }
+    const personalAmount = Math.abs(tx.amount) - p10Amount
+    setSaving(prev => ({ ...prev, [tx.id]: true }))
+    try {
+      await window.api.transactions.split(tx.id, [
+        { amount: p10Amount,     bucket: "Peak 10",  p10_category: "Telephone & Communication", description_notes: "AT&T line 832-687-0468 — Peak 10" },
+        { amount: personalAmount, bucket: "Personal", description_notes: "AT&T personal lines — remainder" },
+      ])
+      setTransactions(prev => prev.filter(t => t.id !== tx.id))
+      onPendingChange?.(transactions.length - 1)
     } catch (e: any) {
       alert("Split error: " + (e?.message ?? "unknown"))
     } finally {
@@ -290,6 +316,49 @@ export default function ReviewQueue({ onPendingChange }: Props) {
                   {tx.flag_reason && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
                       <strong>⚠️ Action needed:</strong> {tx.flag_reason}
+                    </div>
+                  )}
+
+                  {/* AT&T bill split tool — shown for AT&T flagged charges ≥ $300 */}
+                  {isAttSplit(tx) && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-3">
+                      <p className="text-sm font-semibold text-orange-800">📱 AT&T Bill Split</p>
+                      <p className="text-xs text-orange-700">
+                        Enter the cost for Peak 10 business line <strong>832-687-0468</strong>.
+                        The remainder will be classified as Personal.
+                      </p>
+                      <div className="flex items-end gap-3">
+                        <div className="flex-1">
+                          <label className="text-xs text-orange-700 block mb-1">Peak 10 amount (line 832-687-0468)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            max={(Math.abs(tx.amount) - 0.01).toFixed(2)}
+                            value={attAmt[tx.id] ?? ""}
+                            onChange={e => {
+                              setAttAmt(prev => ({ ...prev, [tx.id]: e.target.value }))
+                            }}
+                            placeholder="0.00"
+                            className="w-full border border-orange-300 rounded px-2 py-1.5 text-sm"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-xs text-orange-700 block mb-1">Personal remainder (auto)</label>
+                          <div className="border border-orange-200 bg-orange-50 rounded px-2 py-1.5 text-sm text-orange-800 font-medium">
+                            {attAmt[tx.id] && !isNaN(parseFloat(attAmt[tx.id]))
+                              ? fmt(Math.abs(tx.amount) - parseFloat(attAmt[tx.id]))
+                              : "—"}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleAttSplit(tx)}
+                        disabled={isSaving || !attAmt[tx.id]}
+                        className="w-full py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50"
+                      >
+                        {isSaving ? "Splitting…" : "Confirm AT&T Split"}
+                      </button>
                     </div>
                   )}
 

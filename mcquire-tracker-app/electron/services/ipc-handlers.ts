@@ -85,7 +85,7 @@ export function registerIpcHandlers(syncFolder: string): void {
         insert.run(uuidv4(), orig.account_id, orig.transaction_date, orig.description_raw, orig.merchant_name,
           frag.amount, frag.bucket, frag.p10_category??null, frag.llc_category??null, frag.description_notes??null, txId)
       }
-      db.prepare("UPDATE transactions SET bucket='Exclude',review_status='auto_classified',updated_at=datetime('now') WHERE id=?").run(txId)
+      db.prepare("UPDATE transactions SET bucket='Exclude',review_status='auto_classified',flag_reason=NULL,updated_at=datetime('now') WHERE id=?").run(txId)
     })()
   })
 
@@ -342,13 +342,15 @@ export function registerIpcHandlers(syncFolder: string): void {
   ipcMain.handle('investments:sync', async () => syncInvestments())
 
   // ── Personal Trip Dates ───────────────────────────────────────────
-  ipcMain.handle('tripDates:list', () => getDb().prepare("SELECT * FROM personal_trip_dates ORDER BY date_from").all())
-  ipcMain.handle('tripDates:add', (_, trip: { trip_name: string; date_from: string; date_to: string; notes?: string }) => {
+  // Preload exposes trips.getAll/save/delete — channels must match.
+  // The UI sends { trip_name, start_date, end_date }; we map → date_from/date_to (DB column names).
+  ipcMain.handle('trips:get-all', () => getDb().prepare("SELECT * FROM personal_trip_dates ORDER BY date_from").all())
+  ipcMain.handle('trips:save', (_, trip: { trip_name: string; start_date: string; end_date: string; notes?: string }) => {
     const id = uuidv4()
-    getDb().prepare("INSERT INTO personal_trip_dates (id,trip_name,date_from,date_to,notes) VALUES (?,?,?,?,?)").run(id, trip.trip_name, trip.date_from, trip.date_to, trip.notes??null)
+    getDb().prepare("INSERT INTO personal_trip_dates (id,trip_name,date_from,date_to,notes) VALUES (?,?,?,?,?)").run(id, trip.trip_name, trip.start_date, trip.end_date, trip.notes??null)
     return id
   })
-  ipcMain.handle('tripDates:delete', (_, id: string) => getDb().prepare("DELETE FROM personal_trip_dates WHERE id=?").run(id))
+  ipcMain.handle('trips:delete', (_, id: string) => getDb().prepare("DELETE FROM personal_trip_dates WHERE id=?").run(id))
 
   console.log('[IPC] All handlers registered')
 }
