@@ -72,7 +72,7 @@ export default function Investments() {
     ? investTx.filter(t => t.account_id === filterAccount || String(t.account_mask ?? "").includes(filterAccount))
     : investTx
 
-  const totalValue = summary?.total_value ?? summary?.totalValue ?? holdings.reduce((s, h) => s + (h.market_value ?? 0), 0)
+  const totalValue = summary?.total_market_value ?? holdings.reduce((s, h) => s + (h.market_value ?? 0), 0)
   const totalCostBasis = holdings.reduce((s, h) => s + (h.cost_basis ?? 0), 0)
   const totalGainLoss = totalCostBasis ? totalValue - totalCostBasis : null
   const totalGainLossPct = totalCostBasis ? (totalGainLoss! / totalCostBasis) * 100 : null
@@ -93,7 +93,7 @@ export default function Investments() {
           <h1 className="text-2xl font-bold text-slate-800">Investment Portfolio</h1>
           <p className="text-sm text-slate-500 mt-1">
             Fidelity, Schwab, Chase Brokerage · via Plaid
-            {summary?.as_of && <span> · as of {fmtDate(summary.as_of)}</span>}
+            {summary?.as_of_date && <span> · as of {fmtDate(summary.as_of_date)}</span>}
           </p>
         </div>
         <button
