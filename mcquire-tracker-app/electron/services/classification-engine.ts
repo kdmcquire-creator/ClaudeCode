@@ -109,9 +109,8 @@ export function classifyTransaction(
     category_source?: string
   },
   rules: Rule[],
-  dbOverride?: Database.Database
+  db: Database.Database
 ): ClassifyResult {
-  const db = dbOverride!
   const merchantNorm = normalizeMerchant(tx.description_raw)
   const date = tx.transaction_date
   const dayOfWeek = new Date(date + 'T12:00:00').getDay() // 0=Sun,1=Mon,...,6=Sat

@@ -92,7 +92,7 @@ export default function Dashboard({ onNavigate }: Props) {
       // Investment total
       const invRaw = await window.api.investments.getPortfolioSummary().catch(() => null)
       const inv = unwrap<any>(invRaw, null)
-      setInvestmentTotal(inv?.total_value ?? inv?.totalValue ?? 0)
+      setInvestmentTotal(inv?.total_market_value ?? 0)
 
     } catch (err) {
       console.error("Dashboard load error:", err)

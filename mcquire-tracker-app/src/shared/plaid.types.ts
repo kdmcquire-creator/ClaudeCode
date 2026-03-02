@@ -110,6 +110,7 @@ export const IPC = {
 
   // Events pushed from main → renderer
   EVENT_SYNC_STARTED: 'event:sync-started',
+  EVENT_SYNC_PROGRESS: 'event:sync-progress',
   EVENT_SYNC_COMPLETED: 'event:sync-completed',
   EVENT_SYNC_ERROR: 'event:sync-error',
   EVENT_REAUTH_REQUIRED: 'event:reauth-required',

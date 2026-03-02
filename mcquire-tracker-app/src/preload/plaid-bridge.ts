@@ -47,6 +47,9 @@ export const plaidBridge = {
   onSyncStarted: (cb: (data: any) => void) => {
     ipcRenderer.on(IPC.EVENT_SYNC_STARTED, (_e, data) => cb(data))
   },
+  onSyncProgress: (cb: (data: { message: string }) => void) => {
+    ipcRenderer.on(IPC.EVENT_SYNC_PROGRESS, (_e, data) => cb(data))
+  },
   onSyncCompleted: (cb: (data: any) => void) => {
     ipcRenderer.on(IPC.EVENT_SYNC_COMPLETED, (_e, data) => cb(data))
   },
@@ -58,6 +61,7 @@ export const plaidBridge = {
   },
   removeAllListeners: () => {
     ipcRenderer.removeAllListeners(IPC.EVENT_SYNC_STARTED)
+    ipcRenderer.removeAllListeners(IPC.EVENT_SYNC_PROGRESS)
     ipcRenderer.removeAllListeners(IPC.EVENT_SYNC_COMPLETED)
     ipcRenderer.removeAllListeners(IPC.EVENT_SYNC_ERROR)
     ipcRenderer.removeAllListeners(IPC.EVENT_REAUTH_REQUIRED)
