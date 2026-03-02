@@ -29,6 +29,8 @@ export default function Dashboard({ onNavigate }: Props) {
   const [investmentTotal, setInvestmentTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [runningRules, setRunningRules] = useState(false)
+  const [rulesResult, setRulesResult] = useState<{ resolved: number } | null>(null)
 
   // Import CSV panel state
   const [showImport, setShowImport] = useState(false)
@@ -105,6 +107,18 @@ export default function Dashboard({ onNavigate }: Props) {
     load()
   }, [])
 
+  const handleRunRules = async () => {
+    setRunningRules(true)
+    setRulesResult(null)
+    try {
+      const raw = await window.api.transactions.runRulesAll()
+      const result = unwrap<{ resolved: number }>(raw, { resolved: 0 })
+      setRulesResult(result)
+      await load()
+    } catch {}
+    finally { setRunningRules(false) }
+  }
+
   const handleSync = async () => {
     setSyncing(true)
     try {
@@ -179,6 +193,14 @@ export default function Dashboard({ onNavigate }: Props) {
         <h1 className="text-2xl font-bold text-navy">Dashboard</h1>
         <div className="flex gap-2">
           <button
+            onClick={handleRunRules}
+            disabled={runningRules}
+            className="btn btn-secondary flex items-center gap-2"
+            title="Run classification rules against all pending transactions"
+          >
+            {runningRules ? "Running..." : "⚡ Run Rules"}
+          </button>
+          <button
             onClick={() => { setShowImport(v => !v); setImportResult(null); setImportError(null); setPreview(null); setImportFile(null) }}
             className="btn btn-secondary flex items-center gap-2"
           >
@@ -193,6 +215,16 @@ export default function Dashboard({ onNavigate }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Run Rules result banner */}
+      {rulesResult && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg px-4 py-2 text-sm text-green-800 flex items-center justify-between">
+          <span>⚡ Rules applied — {rulesResult.resolved} transaction{rulesResult.resolved !== 1 ? 's' : ''} auto-classified.
+            {rulesResult.resolved === 0 ? ' Remaining pending items need manual review.' : ''}
+          </span>
+          <button onClick={() => setRulesResult(null)} className="text-green-600 hover:text-green-900 ml-4">✕</button>
+        </div>
+      )}
 
       {/* Import CSV Panel */}
       {showImport && (

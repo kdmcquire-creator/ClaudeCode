@@ -21,6 +21,7 @@ import { registerInvestmentsIpcHandlers } from '../../electron/services/investme
 import { registerFinancialStatementsHandlers } from '../../electron/services/financial-statements-ipc'
 import { registerHistoricalImportHandlers } from '../../electron/services/historical-import.service'
 import { AppLifecycleService } from '../../electron/services/app-lifecycle.service'
+import { reclassifyPendingAfterRuleChange } from '../../electron/services/classification-engine'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Protocol registration (must happen before app.whenReady)
@@ -727,6 +728,12 @@ function registerAppIpcHandlers(): void {
     db.prepare(`UPDATE transactions SET ${set}, updated_at = datetime('now') WHERE id = ?`)
       .run(...fields.map((f) => update[f]), id)
     return { success: true }
+  })
+
+  ipcMain.handle('transactions:run-rules-all', () => {
+    if (!db) return { success: false, error: 'DB not initialized' }
+    const result = reclassifyPendingAfterRuleChange(db)
+    return { success: true, ...result }
   })
 
   ipcMain.handle('transactions:get-all', (_event, filters: Record<string, any> = {}) => {

@@ -29,10 +29,11 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   transactions: {
-    getPending:  ()                                           => ipcRenderer.invoke('transactions:get-pending'),
-    classify:    (id: string, update: Record<string, any>)   => ipcRenderer.invoke('transactions:classify', id, update),
-    getAll:      (filters?: Record<string, any>)             => ipcRenderer.invoke('transactions:get-all', filters),
-    split:       (parentId: string, fragments: any[])        => ipcRenderer.invoke('transactions:split', parentId, fragments),
+    getPending:   ()                                           => ipcRenderer.invoke('transactions:get-pending'),
+    classify:     (id: string, update: Record<string, any>)   => ipcRenderer.invoke('transactions:classify', id, update),
+    getAll:       (filters?: Record<string, any>)             => ipcRenderer.invoke('transactions:get-all', filters),
+    split:        (parentId: string, fragments: any[])        => ipcRenderer.invoke('transactions:split', parentId, fragments),
+    runRulesAll:  ()                                          => ipcRenderer.invoke('transactions:run-rules-all'),
   },
 
   rules: {

@@ -117,6 +117,7 @@ declare global {
         classify: (id: string, update: Record<string, any>) => Promise<any>
         getAll: (filters?: Record<string, any>) => Promise<any>
         split: (parentId: string, fragments: any[]) => Promise<any>
+        runRulesAll: () => Promise<any>
       }
       rules: {
         getAll: () => Promise<any>
