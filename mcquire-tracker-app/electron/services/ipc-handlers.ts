@@ -309,7 +309,7 @@ export function registerIpcHandlers(syncFolder: string): void {
         const accountId = accountMappings[row.monarch_account] ?? null
         if (!accountId) continue
         const r = insertTx.run(uuidv4(), accountId, row.source_row_hash, row.transaction_date, row.description_raw, row.amount, row.category_source)
-        if (r.changes > 0) inserted++ else dupes++
+        if (r.changes > 0) { inserted++ } else { dupes++ }
       }
     })()
 
