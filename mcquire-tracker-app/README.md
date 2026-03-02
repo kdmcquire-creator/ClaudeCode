@@ -176,3 +176,46 @@ mcquire-tracker/
 **Expense report blocked: "Add attendee names"**
 - Every Meals & Meetings - external entry needs attendee names in Description/Notes
 - Open Review Queue → find the flagged transaction → fill in the attendees field
+
+---
+
+## Removing a Previous Installation (Clean Slate)
+
+Run this script in **CMD as Administrator** to fully remove any previous installation before reinstalling. This removes the app, the database, all cached data, and all Windows Credential Manager entries for McQuire Tracker.
+
+```cmd
+@echo off
+echo Removing McQuire Tracker — all traces...
+
+REM 1. Kill any running instance
+taskkill /f /im "McQuire Tracker.exe" 2>nul
+
+REM 2. Uninstall via Windows Add/Remove Programs (silent)
+for /f "tokens=*" %%i in ('reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" /s /f "McQuire Tracker" /k 2^>nul ^| findstr "HKEY"') do (
+    for /f "tokens=2*" %%a in ('reg query "%%i" /v UninstallString 2^>nul ^| findstr "UninstallString"') do (
+        %%b /S
+    )
+)
+
+REM 3. Remove AppData (Electron user data — settings, DB path cache)
+rd /s /q "%APPDATA%\mcquire-tracker" 2>nul
+rd /s /q "%APPDATA%\McQuire Tracker" 2>nul
+rd /s /q "%LOCALAPPDATA%\mcquire-tracker" 2>nul
+rd /s /q "%LOCALAPPDATA%\McQuire Tracker" 2>nul
+
+REM 4. Remove Windows Credential Manager entries (stored SMTP password)
+cmdkey /delete:mcquire-tracker-smtp 2>nul
+
+REM 5. Remove desktop and start menu shortcuts
+del /f /q "%USERPROFILE%\Desktop\McQuire Tracker.lnk" 2>nul
+rd /s /q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\McQuire Tracker" 2>nul
+
+REM 6. Remove from registry (any leftover keys)
+reg delete "HKCU\SOFTWARE\mcquire-tracker" /f 2>nul
+reg delete "HKCU\SOFTWARE\McQuire Tracker" /f 2>nul
+
+echo Done. You can now run the installer for a clean install.
+pause
+```
+
+**Note:** This does NOT delete your sync folder (Dropbox/OneDrive/etc.) or the `mcquire.db` database inside it. Your transaction data is safe. If you also want to wipe the database and start completely fresh, delete the `db\` folder inside your sync folder manually before reinstalling.

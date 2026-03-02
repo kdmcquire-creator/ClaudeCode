@@ -8,11 +8,11 @@ import { ipcRenderer } from 'electron'
 // ── Financial Statements ──────────────────────────────────────────────────────
 
 export const statementsBridge = {
-  pandl:          () => ipcRenderer.invoke('statements:pandl'),
-  balanceSheet:   () => ipcRenderer.invoke('statements:balance-sheet'),
-  cashflow:       () => ipcRenderer.invoke('statements:cashflow'),
-  personalSummary:() => ipcRenderer.invoke('statements:personal-summary'),
-  fullTracker:    () => ipcRenderer.invoke('statements:full-tracker'),
+  pandl:          (payload?: any) => ipcRenderer.invoke('statements:pandl', payload),
+  balanceSheet:   (payload?: any) => ipcRenderer.invoke('statements:balance-sheet', payload),
+  cashflow:       (payload?: any) => ipcRenderer.invoke('statements:cashflow', payload),
+  personalSummary:(payload?: any) => ipcRenderer.invoke('statements:personal-summary', payload),
+  fullTracker:    (payload?: any) => ipcRenderer.invoke('statements:full-tracker', payload),
   openFolder:     () => ipcRenderer.invoke('statements:open-folder'),
   setCashBalance: (payload: { date: string; amount: number }) =>
     ipcRenderer.invoke('statements:set-cash-balance', payload),

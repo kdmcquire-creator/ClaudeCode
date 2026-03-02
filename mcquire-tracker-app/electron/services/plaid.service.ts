@@ -422,13 +422,14 @@ export class PlaidService {
       expense_report_id: null,
     }
 
-    // Run classification engine (imported from classification.service)
+    // Run classification engine
     try {
-      const { classifyTransaction } = require('./classification.service')
-      const classified = classifyTransaction(this.db, rawTx)
-      Object.assign(rawTx, classified)
+      const { classifyTransaction, loadActiveRules } = require('./classification-engine')
+      const rules = loadActiveRules(this.db)
+      const result = classifyTransaction(rawTx, rules, this.db)
+      Object.assign(rawTx, result)
     } catch {
-      // Classification service unavailable during test — leave as pending_review
+      // Classification engine unavailable — leave as pending_review
     }
 
     this.db

@@ -187,6 +187,7 @@ export const LLC_CATEGORIES = [
   'Lodging - Business Housing',
   'Utilities - Home Office',
   'Executive Wellness',
+  'Payroll - Salary',
   'Business Services - Payroll',
   'Business Services - Software',
   'Business Services - Other',

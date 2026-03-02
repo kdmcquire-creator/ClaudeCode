@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react"
+import { P10_CATEGORIES, LLC_CATEGORIES } from "../../shared/types"
 
 function unwrap<T>(res: any, fallback: T): T {
   if (res === null || res === undefined) return fallback
@@ -8,17 +9,6 @@ function unwrap<T>(res: any, fallback: T): T {
 
 const BUCKETS = ["Peak 10", "Moonsmoke LLC", "Personal", "Exclude"]
 const STATUSES = ["auto_classified", "manually_classified", "pending_review", "flagged"]
-
-const P10_CATEGORIES = [
-  "Meals & Meetings - external", "Travel", "Lodging", "Dues & Subscriptions",
-  "Office Supplies & Expenses", "Telephone & Communication", "Other - Executive Wellness",
-]
-const LLC_CATEGORIES = [
-  "Rent - Business Lodging", "Lodging - Business Housing", "Utilities - Home Office",
-  "Executive Wellness", "Payroll - Salary", "Taxes - Payroll", "Business Services - Payroll",
-  "Business Services - Software", "Business Services - Other", "Bank Fees",
-  "Telephone - Business Line", "Meals & Entertainment", "Travel", "Business Expenses - Other",
-]
 
 const bucketColor: Record<string, string> = {
   "Peak 10": "bg-blue-100 text-blue-800",
