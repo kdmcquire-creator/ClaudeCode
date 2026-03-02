@@ -1,9 +1,6 @@
 import Papa from 'papaparse'
 import fs from 'fs'
-import path from 'path'
-import { v4 as uuidv4 } from 'uuid'
 import { createHash } from 'crypto'
-import type { Account } from '../../src/shared/types'
 
 export interface ParsedRow {
   transaction_date: string

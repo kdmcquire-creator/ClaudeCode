@@ -1,18 +1,13 @@
 import ExcelJS from 'exceljs'
-import path from 'path'
 import Database from 'better-sqlite3'
-import type { Transaction, Account, Investment } from '../../src/shared/types'
+import type { Transaction } from '../../src/shared/types'
 
 const NAVY = '1F3864'
-const DBLUE = '2E75B6'
 const LBLUE = 'BDD7EE'
-const LLBLUE = 'DEEAF1'
 const WHITE = 'FFFFFF'
-const LGRAY = 'F2F2F2'
-const LGREEN = 'E2EFDA'
 
 function navyFill() { return { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: NAVY } } }
-function headerStyle(ws: ExcelJS.Worksheet, row: ExcelJS.Row) {
+function headerStyle(_ws: ExcelJS.Worksheet, row: ExcelJS.Row) {
   row.eachCell(cell => {
     cell.fill = navyFill()
     cell.font = { name: 'Arial', size: 9, bold: true, color: { argb: WHITE } }
@@ -158,7 +153,7 @@ export async function generateFullTrackerExport(db: Database.Database, outputPat
   const wsSummary = wb.addWorksheet('📊 Summary')
   const wsPeak10 = wb.addWorksheet('🏢 Peak 10 (W2)')
   const wsLLC = wb.addWorksheet('💼 Moonsmoke LLC')
-  const wsPersonal = wb.addWorksheet('🏠 Personal')
+  wb.addWorksheet('🏠 Personal')
   const wsAll = wb.addWorksheet('📋 All Transactions')
 
   // All Transactions tab

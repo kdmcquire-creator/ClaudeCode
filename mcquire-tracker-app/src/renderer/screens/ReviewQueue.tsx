@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback } from "react"
 
 function unwrap<T>(res: any, fallback: T): T {
   if (res === null || res === undefined) return fallback
@@ -37,7 +37,6 @@ const LLC_CATEGORIES = [
   "Business Expenses - Other",
 ]
 
-const PERSONAL_REASONS = ["Personal expense", "Family", "Auto", "Home", "Groceries", "Medical", "Other"]
 
 const bucketColor: Record<string, string> = {
   "Peak 10": "bg-blue-100 text-blue-800",

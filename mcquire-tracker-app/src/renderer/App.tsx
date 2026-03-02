@@ -100,7 +100,7 @@ declare global {
       selectFolder: () => Promise<string | null>
       getSyncFolder: () => Promise<string | null>
       setSyncFolder: (path: string) => Promise<void>
-      initDatabase: (folder: string) => Promise<void>
+      initDatabase: (folder: string) => Promise<{ isNew: boolean }>
     }
     api: {
       onInit?: (cb: (data: { firstRun: boolean; syncFolder: string; version: string }) => void) => void
@@ -110,6 +110,7 @@ declare global {
       db: {
         getSetting: (key: string) => Promise<any>
         setSetting: (key: string, value: string) => Promise<any>
+        getAllSettings: () => Promise<any>
         getReviewCount: () => Promise<any>
         getBucketTotals: () => Promise<any>
       }
@@ -146,6 +147,13 @@ declare global {
       email: {
         saveSmtp: (config: any) => Promise<any>
         sendTest: () => Promise<any>
+      }
+      settings: {
+        getSmtp: () => Promise<any>
+        saveSmtp: (config: any) => Promise<any>
+        testEmail: (email: string) => Promise<any>
+        getAll: () => Promise<any>
+        set: (key: string, value: string) => Promise<any>
       }
     }
   }

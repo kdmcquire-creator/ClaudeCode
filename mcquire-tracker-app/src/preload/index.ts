@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('api', {
   db: {
     getSetting:      (key: string)                   => ipcRenderer.invoke('db:get-setting', key),
     setSetting:      (key: string, value: string)    => ipcRenderer.invoke('db:set-setting', key, value),
+    getAllSettings:  ()                              => ipcRenderer.invoke('settings:getAll'),
     getReviewCount:  ()                              => ipcRenderer.invoke('db:get-review-count'),
     getBucketTotals: ()                              => ipcRenderer.invoke('db:get-bucket-totals'),
   },
@@ -72,6 +73,15 @@ contextBridge.exposeInMainWorld('api', {
   email: {
     saveSmtp: (config: any) => ipcRenderer.invoke('email:save-smtp', config),
     sendTest: ()            => ipcRenderer.invoke('email:send-test'),
+  },
+
+  // ── Settings ───────────────────────────────────────────────────────────────
+  settings: {
+    getSmtp:   ()            => ipcRenderer.invoke('settings:getSmtp'),
+    saveSmtp:  (config: any) => ipcRenderer.invoke('settings:saveSmtp', config),
+    testEmail: (email: string) => ipcRenderer.invoke('settings:testEmail', email),
+    getAll:    ()            => ipcRenderer.invoke('settings:getAll'),
+    set:       (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value),
   },
 
 })

@@ -18,7 +18,6 @@ export class AppLifecycleService {
   private getMainWindow: () => BrowserWindow | null
   private tray: Tray | null = null
   private lockPath: string
-  private backupCron: cron.ScheduledTask | null = null
 
   private constructor(
     syncFolder: string,
@@ -116,7 +115,7 @@ export class AppLifecycleService {
 
   private startBackupCron(): void {
     // Run at 3:00 AM daily (1 hour after default sync)
-    this.backupCron = cron.schedule('0 3 * * *', () => {
+    cron.schedule('0 3 * * *', () => {
       this.runBackup()
     })
     console.log('[Backup] Nightly backup cron started (3:00 AM).')
@@ -271,7 +270,7 @@ export class AppLifecycleService {
     if (win) {
       win.on('close', (event) => {
         // Only minimize to tray if we're not actually quitting
-        if (!app.isQuiting) {
+        if (!(app as any).isQuiting) {
           event.preventDefault()
           win.hide()
           this.tray?.displayBalloon({

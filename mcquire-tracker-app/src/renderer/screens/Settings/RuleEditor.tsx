@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { P10_CATEGORIES, LLC_CATEGORIES } from "../../../shared/types"
 
 function unwrap<T>(res: any, fallback: T): T {

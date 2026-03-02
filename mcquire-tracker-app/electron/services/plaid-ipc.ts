@@ -5,7 +5,7 @@
 //
 // Call registerPlaidIpcHandlers(ipcMain, db, plaid, scheduler) once during app init.
 
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import Database from 'better-sqlite3'
 import { PlaidService } from './plaid.service'
 import { openPlaidLink } from './plaid-link.service'

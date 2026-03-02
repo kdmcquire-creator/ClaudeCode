@@ -1,10 +1,6 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid'
 import { safeStorage } from 'electron'
 import { getDb } from '../db/index'
-import { v4 as uuidv4 } from 'uuid'
-import type { Account } from '../../src/shared/types'
-
-const CRED_PREFIX = 'McQuireTracker_plaid_'
 let plaidClient: PlaidApi | null = null
 
 export interface PlaidCredentials {

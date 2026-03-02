@@ -1,11 +1,10 @@
 import { ipcMain, dialog, shell } from 'electron'
 import { getDb, getSetting, setSetting, getAllSettings } from '../db/index'
-import { classifyAndSave, reclassifyPendingAfterRuleChange, loadActiveRules } from './classification-engine'
+import { classifyAndSave, reclassifyPendingAfterRuleChange } from './classification-engine'
 import { syncAllPlaidAccounts, syncInvestments } from './plaid-sync'
 import { storePlaidCredentials, loadPlaidCredentials, createLinkToken, exchangePublicToken, fetchAccountsForItem, storeAccessToken } from './plaid-service'
 import { generatePeak10ExpenseReport, generateFullTrackerExport, validateExpenseReportReadiness } from './excel-export'
-import { storeSmtpConfig, loadSmtpConfig, sendTestEmail, sendNotification } from './email-service'
-import { runBackup } from './backup-service'
+import { storeSmtpConfig, loadSmtpConfig, sendTestEmail } from './email-service'
 import { parseMonarchCsv } from './csv-parser'
 import { v4 as uuidv4 } from 'uuid'
 import type { Rule, Account, Transaction } from '../../src/shared/types'
@@ -116,7 +115,7 @@ export function registerIpcHandlers(syncFolder: string): void {
       rule.bucket??null,rule.p10_category??null,rule.llc_category??null,
       rule.description_notes??null,rule.flag_reason??null,rule.action,
       rule.priority_order,rule.is_active??1,rule.notes??null)
-    const result = reclassifyPendingAfterRuleChange()
+    const result = reclassifyPendingAfterRuleChange(getDb())
     return { id, resolved: result.resolved }
   })
 
@@ -126,7 +125,7 @@ export function registerIpcHandlers(syncFolder: string): void {
     const sets = Object.keys(updates).filter(k => allowed.includes(k)).map(k => `${k}=?`)
     const vals = Object.keys(updates).filter(k => allowed.includes(k)).map(k => (updates as any)[k])
     db.prepare(`UPDATE rules SET ${sets.join(',')}, updated_at=datetime('now') WHERE id=?`).run(...vals, id)
-    const result = reclassifyPendingAfterRuleChange()
+    const result = reclassifyPendingAfterRuleChange(getDb())
     return { resolved: result.resolved }
   })
 
@@ -208,7 +207,6 @@ export function registerIpcHandlers(syncFolder: string): void {
     const internalId = uuidv4()
     storeAccessToken(internalId, accessToken)
     // Fetch institution info
-    const { PlaidApi } = require('plaid')
     const client = (require('./plaid-service') as any).getPlaidClient()
     const itemResp = await client.itemGet({ access_token: accessToken })
     const instResp = await client.institutionsGetById({
@@ -226,7 +224,7 @@ export function registerIpcHandlers(syncFolder: string): void {
 
   // ── Reports / Exports ─────────────────────────────────────────────
   ipcMain.handle('reports:validate', (_, dateFrom: string, dateTo: string) => {
-    return validateExpenseReportReadiness(dateFrom, dateTo)
+    return validateExpenseReportReadiness(getDb(), dateFrom, dateTo)
   })
 
   ipcMain.handle('reports:generateExpenseReport', async (_, dateFrom: string, dateTo: string, periodLabel: string) => {
@@ -234,7 +232,7 @@ export function registerIpcHandlers(syncFolder: string): void {
     fs.mkdirSync(exportsDir, { recursive: true })
     const fileName = `Peak10_ExpenseReport_${periodLabel.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.xlsx`
     const outputPath = path.join(exportsDir, fileName)
-    const result = await generatePeak10ExpenseReport(dateFrom, dateTo, periodLabel, outputPath)
+    const result = await generatePeak10ExpenseReport(getDb(), dateFrom, dateTo, periodLabel, outputPath)
     shell.showItemInFolder(outputPath)
     return result
   })
@@ -244,7 +242,7 @@ export function registerIpcHandlers(syncFolder: string): void {
     fs.mkdirSync(exportsDir, { recursive: true })
     const fileName = `McQuire_Tracker_${new Date().toISOString().substring(0,10)}.xlsx`
     const outputPath = path.join(exportsDir, fileName)
-    await generateFullTrackerExport(outputPath)
+    await generateFullTrackerExport(getDb(), outputPath)
     shell.showItemInFolder(outputPath)
     return outputPath
   })
@@ -315,7 +313,7 @@ export function registerIpcHandlers(syncFolder: string): void {
 
     // Classify
     const newTxs = db.prepare("SELECT t.id, t.description_raw, t.amount, t.transaction_date, a.account_mask, t.category_source FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.review_status='pending_review'").all() as any[]
-    const { classified, queued } = classifyAndSave(newTxs)
+    const { classified, queued } = classifyAndSave(getDb(), newTxs)
 
     return { total: rows.length, inserted, dupes, classified, queued }
   })
@@ -351,6 +349,27 @@ export function registerIpcHandlers(syncFolder: string): void {
     return id
   })
   ipcMain.handle('trips:delete', (_, id: string) => getDb().prepare("DELETE FROM personal_trip_dates WHERE id=?").run(id))
+
+  // ── DB helpers (used by preload db.* bridge) ─────────────────────
+  ipcMain.handle('db:get-review-count', () => {
+    return getDb().prepare("SELECT COUNT(*) as c FROM transactions WHERE review_status IN ('pending_review','flagged')").get()
+  })
+
+  ipcMain.handle('db:get-bucket-totals', () => {
+    const db = getDb()
+    const peak10 = db.prepare("SELECT COUNT(*) as count, SUM(ABS(amount)) as total FROM transactions WHERE bucket='Peak 10'").get()
+    const llc    = db.prepare("SELECT COUNT(*) as count, SUM(ABS(amount)) as total FROM transactions WHERE bucket='Moonsmoke LLC'").get()
+    const personal = db.prepare("SELECT COUNT(*) as count, SUM(ABS(amount)) as total FROM transactions WHERE bucket='Personal'").get()
+    const pending  = db.prepare("SELECT COUNT(*) as c FROM transactions WHERE review_status='pending_review'").get()
+    return { peak10, llc, personal, pending }
+  })
+
+  ipcMain.handle('db:get-setting', (_, key: string) => getSetting(key))
+  ipcMain.handle('db:set-setting', (_, key: string, value: string) => setSetting(key, value))
+
+  // ── Email helpers (used by preload email.* bridge) ────────────────
+  ipcMain.handle('email:save-smtp', (_, config: any) => storeSmtpConfig(config))
+  ipcMain.handle('email:send-test', async (_, toEmail: string) => sendTestEmail(toEmail))
 
   console.log('[IPC] All handlers registered')
 }

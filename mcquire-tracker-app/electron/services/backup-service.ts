@@ -4,7 +4,6 @@ import { getDb, setSetting } from '../db/index'
 
 export function runBackup(syncFolder: string): void {
   try {
-    const dbPath = path.join(syncFolder, 'db', 'mcquire.db')
     const backupDir = path.join(syncFolder, 'backups')
     fs.mkdirSync(backupDir, { recursive: true })
 

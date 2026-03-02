@@ -24,8 +24,6 @@ const LBLUE     = 'DCE6F1'
 const WHITE     = 'FFFFFF'
 const LLC_GREEN = 'E2EFDA'
 const LLC_DKGRN = '375623'
-const PERSONAL  = 'F2F2F2'
-const WARN_YELL = 'FFFF00'
 
 // ─── Format helpers ───────────────────────────────────────────────────────────
 
@@ -35,9 +33,6 @@ function currencyCell(cell: ExcelJS.Cell, value: number | null) {
   if (value !== null && value < 0) cell.font = { ...cell.font, color: { argb: 'FFC00000' } }
 }
 
-function headerFill(cell: ExcelJS.Cell, color: string) {
-  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + color } }
-}
 
 function stripe(row: ExcelJS.Row, idx: number) {
   const bg = idx % 2 === 0 ? LBLUE : WHITE
@@ -134,7 +129,7 @@ export class FinancialStatementsService {
 
     const revenueRow = ws.addRow([
       'Consulting Revenue (Strawn)',
-      ...months.map((m) => null),
+      ...months.map(() => null),
       null,
     ])
     let revTotal = 0
@@ -223,7 +218,7 @@ export class FinancialStatementsService {
       ...currentYearMonths.map((m) => ({ key: m, width: 16 })),
     ]
 
-    const allCols = [...quarters, ...currentYearMonths.map((m) => ({ label: m, ...this.getMonthSnapshot(m) }))]
+    const allCols = [...quarters, ...currentYearMonths.map((m) => ({ ...this.getMonthSnapshot(m) }))]
 
     // Title
     const title = ws.addRow(['Moonsmoke, LLC — Balance Sheet (Quarterly Snapshots)', ...allCols.map(() => '')])
@@ -726,7 +721,7 @@ export class FinancialStatementsService {
     return result
   }
 
-  private getLLCExpenseCategoriesByMonth(months: string[]): Array<{
+  private getLLCExpenseCategoriesByMonth(_months: string[]): Array<{
     category: string
     months: Record<string, number>
   }> {

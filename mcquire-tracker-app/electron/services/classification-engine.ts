@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import type { Rule, Transaction, Bucket } from '../../src/shared/types'
+import type { Rule, Bucket } from '../../src/shared/types'
 import { createHash } from 'crypto'
 
 // Houston-only restaurant confirmed list
@@ -95,9 +95,9 @@ function ruleMatches(rule: Rule, tx: {
 
 function isPersonalTripDate(db: Database.Database, date: string): boolean {
   const trips = db.prepare('SELECT * FROM personal_trip_dates').all() as {
-    date_from: string; date_to: string
+    start_date: string; end_date: string
   }[]
-  return trips.some(t => date >= t.date_from && date <= t.date_to)
+  return trips.some(t => date >= t.start_date && date <= t.end_date)
 }
 
 export function classifyTransaction(

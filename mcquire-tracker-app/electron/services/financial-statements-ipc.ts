@@ -4,15 +4,14 @@
 // Register by calling registerFinancialStatementsHandlers() in main process.
 
 import { ipcMain, shell } from 'electron'
-import * as path from 'path'
 import * as fs from 'fs'
 import Database from 'better-sqlite3'
 import { FinancialStatementsService } from './financial-statements.service'
 import {
   generatePeak10ExpenseReport,
-  generateFullTrackerExport,
   validateExpenseReportReadiness,
 } from './excel-export'
+import * as path from 'path'
 
 export function registerFinancialStatementsHandlers(
   db: Database.Database,
@@ -72,7 +71,6 @@ export function registerFinancialStatementsHandlers(
 
   // ── Open exports folder in Explorer ──────────────────────────────────────────
   ipcMain.handle('statements:open-folder', async () => {
-    const { path } = require('path')
     const exportDir = require('path').join(getSyncFolder(), 'exports', 'statements')
     require('fs').mkdirSync(exportDir, { recursive: true })
     shell.openPath(exportDir)

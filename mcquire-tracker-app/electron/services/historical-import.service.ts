@@ -11,7 +11,6 @@
 
 import * as Papa from 'papaparse'
 import * as fs from 'fs'
-import * as path from 'path'
 import * as crypto from 'crypto'
 import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
@@ -21,18 +20,6 @@ import { ipcMain, dialog } from 'electron'
 // Monarch export columns: Date, Merchant, Category, Account, Original Statement,
 // Notes, Amount, Tags, Owner, Business Entity
 
-const MONARCH_COLUMN_MAP: Record<string, string> = {
-  'Date':               'transaction_date',
-  'Merchant':           'merchant_name',
-  'Category':           'category_source',
-  'Account':            'account_raw',
-  'Original Statement': 'description_raw',
-  'Notes':              'notes_raw',
-  'Amount':             'amount',
-  'Tags':               'tags',
-  'Owner':              'owner',
-  'Business Entity':    'business_entity',
-}
 
 // Account name → mask lookup (from workflow doc)
 const ACCOUNT_NAME_TO_MASK: Record<string, string> = {
@@ -105,10 +92,6 @@ export class HistoricalImportService {
     return format === 'apple_card' ? 'Transaction Date' : 'Date'
   }
 
-  private getMerchantColumn(format: string): string {
-    return format === 'apple_card' ? 'Merchant' : 'Merchant'
-  }
-
   private getAmountColumn(format: string): string {
     return format === 'apple_card' ? 'Amount (USD)' : 'Amount'
   }
@@ -133,7 +116,6 @@ export class HistoricalImportService {
 
     const format = this.detectFormat(columns)
     const dateCol = this.getDateColumn(format)
-    const amountCol = this.getAmountColumn(format)
 
     // Validate columns based on detected format
     let missingCols: string[] = []
@@ -463,7 +445,6 @@ export function registerHistoricalImportHandlers(
           accountsFound: preview.accounts_found,
           excludedCount: preview.excluded_count,
           columnMappingValid: preview.column_mapping_valid,
-          errors: preview.errors,
           // keep originals too for diagnostics
           ...preview,
         },
@@ -473,7 +454,7 @@ export function registerHistoricalImportHandlers(
     }
   })
 
-  ipcMain.handle('import:run', async (event, filePath: string) => {
+  ipcMain.handle('import:run', async (_event, filePath: string) => {
     try {
       const result = await service.importCSV(filePath, (progress) => {
         // Push progress to renderer

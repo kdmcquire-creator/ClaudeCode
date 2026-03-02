@@ -1,9 +1,8 @@
-import { getDb, getSetting } from '../db/index'
-import { syncTransactions, fetchInvestmentHoldings, fetchInvestmentTransactions } from './plaid-service'
+import { getDb } from '../db/index'
+import { syncTransactions, fetchInvestmentHoldings } from './plaid-service'
 import { classifyAndSave } from './classification-engine'
 import { sendNotification } from './email-service'
 import { v4 as uuidv4 } from 'uuid'
-import type { Transaction } from '../../src/shared/types'
 
 export async function syncAllPlaidAccounts(): Promise<{ success: number; errors: number }> {
   const db = getDb()
@@ -93,7 +92,7 @@ async function syncPlaidItem(plaidItemId: string, institutionName: string): Prom
       ORDER BY t.created_at DESC LIMIT ?
     `).all(plaidItemId, newCount) as any[]
 
-    const result = classifyAndSave(freshIds)
+    const result = classifyAndSave(db, freshIds)
     classified = result.classified
     queued = result.queued
   }

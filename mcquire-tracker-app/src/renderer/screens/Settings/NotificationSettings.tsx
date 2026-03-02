@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 
 const SMTP_PRESETS = [
   { label: "Gmail (App Password)", host: "smtp.gmail.com", port: 587, secure: false },
@@ -13,23 +13,23 @@ export default function NotificationSettings() {
   const [testing, setSaving] = useState(false)
 
   useEffect(() => {
-    window.api.getAllSettings().then(setSettings)
-    window.api.getSmtpConfig().then(c => { if (c) setSmtp({ ...smtp, ...c }) })
+    window.api.db.getAllSettings().then(setSettings)
+    window.api.settings.getSmtp().then(c => { if (c) setSmtp({ ...smtp, ...c }) })
   }, [])
 
   const save = async (key: string, val: string) => {
-    await window.api.setSetting(key, val)
+    await window.api.db.setSetting(key, val)
     setSettings(s => ({ ...s, [key]: val }))
   }
 
   const saveSmtp = async () => {
-    await window.api.saveSmtpConfig(smtp)
+    await window.api.settings.saveSmtp(smtp)
     alert("SMTP settings saved securely.")
   }
 
   const testEmail = async () => {
     setSaving(true)
-    const result = await window.api.testEmail(settings.notification_email ?? "")
+    const result = await window.api.settings.testEmail(settings.notification_email ?? "")
     setTestResult(result)
     setSaving(false)
   }

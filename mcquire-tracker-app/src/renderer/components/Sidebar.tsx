@@ -1,4 +1,3 @@
-import React from "react"
 import type { Screen } from "../App"
 
 interface Props {

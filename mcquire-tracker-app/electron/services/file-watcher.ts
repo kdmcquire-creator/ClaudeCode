@@ -2,7 +2,7 @@ import chokidar, { FSWatcher } from 'chokidar'
 import path from 'path'
 import fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
-import { getDb, getSetting } from '../db/index'
+import { getDb } from '../db/index'
 import { parseUSAAcsv, parseAppleCardCsv, detectFileType } from './csv-parser'
 import { classifyAndSave } from './classification-engine'
 import type { Account } from '../../src/shared/types'
@@ -99,7 +99,7 @@ async function processFile(
       ORDER BY t.created_at DESC LIMIT ?
     `).all(account.id, inserted) as any[]
 
-    const { classified, queued } = classifyAndSave(newIds.map(r => ({
+    const { classified, queued } = classifyAndSave(db, newIds.map(r => ({
       id: r.id, description_raw: r.description_raw, amount: r.amount,
       transaction_date: r.transaction_date, account_mask: r.account_mask,
       category_source: r.category_source

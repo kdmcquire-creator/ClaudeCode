@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react"
 import type { Screen } from "../App"
 
 function unwrap<T>(res: any, fallback: T): T {
@@ -27,7 +27,6 @@ export default function Dashboard({ onNavigate }: Props) {
   const [accounts, setAccounts] = useState<any[]>([])
   const [recentTx, setRecentTx] = useState<any[]>([])
   const [investmentTotal, setInvestmentTotal] = useState(0)
-  const [reviewCount, setReviewCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
 
@@ -80,11 +79,6 @@ export default function Dashboard({ onNavigate }: Props) {
         })
       }
 
-      // Review count
-      const rcRaw = await window.api.db.getReviewCount().catch(() => 0)
-      const rc = unwrap<number>(rcRaw, 0)
-      setReviewCount(typeof rc === "number" ? rc : 0)
-
       // Accounts
       const acctsRaw = await window.api.accounts.list().catch(() => [])
       const accts: any[] = unwrap<any[]>(acctsRaw, [])
@@ -129,7 +123,7 @@ export default function Dashboard({ onNavigate }: Props) {
     setImportResult(null)
     setImportError(null)
     try {
-      const prevRaw = await window.api.import.previewCSV(filePath)
+      const prevRaw = await window.api.import.preview(filePath)
       const prev = unwrap<any>(prevRaw, null)
       setPreview(prev)
     } catch (e: any) {
@@ -148,11 +142,11 @@ export default function Dashboard({ onNavigate }: Props) {
     const listener = (_e: any, data: any) => {
       setImportProgress(`${data.stage}: ${data.message} (${data.current}/${data.total})`)
     }
-    window.electron?.ipcRenderer.on("import:progress", listener)
+    ;(window as any).electron?.ipcRenderer.on("import:progress", listener)
     progressListenerRef.current = listener
 
     try {
-      const raw = await window.api.import.runImport(importFile)
+      const raw = await window.api.import.run(importFile)
       const result = unwrap<any>(raw, null)
       setImportResult(result)
       setImportProgress(null)
@@ -163,7 +157,7 @@ export default function Dashboard({ onNavigate }: Props) {
     } finally {
       setImporting(false)
       if (progressListenerRef.current) {
-        window.electron?.ipcRenderer.removeListener("import:progress", progressListenerRef.current)
+        ;(window as any).electron?.ipcRenderer.removeListener("import:progress", progressListenerRef.current)
         progressListenerRef.current = null
       }
     }

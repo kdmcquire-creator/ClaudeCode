@@ -148,7 +148,7 @@ function StepSyncFolder({
     if (!folder) return
     setChecking(true)
     try {
-      const result = await window.electronAPI?.initDatabase(folder)
+      const result = (await window.electronAPI?.initDatabase(folder)) as { isNew: boolean } | undefined
       setIsNew(result?.isNew ?? true)
       onNext(folder)
     } finally {
@@ -826,7 +826,7 @@ export default function SetupWizard({
   onComplete: () => void
 }) {
   const [step, setStep] = useState(0)
-  const [syncFolder, setSyncFolder] = useState('')
+  const [_syncFolder, setSyncFolder] = useState('')
 
   const next = () => setStep((s) => s + 1)
   const back = () => setStep((s) => s - 1)

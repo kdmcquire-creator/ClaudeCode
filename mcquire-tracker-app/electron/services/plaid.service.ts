@@ -384,7 +384,7 @@ export class PlaidService {
 
   // ─── Transaction Import Helpers ───────────────────────────────────────────────
 
-  private importPlaidTransaction(tx: any, plaidItemId: string): 'new' | 'duplicate' | 'queued' {
+  private importPlaidTransaction(tx: any, _plaidItemId: string): 'new' | 'duplicate' | 'queued' {
     // Deduplicate
     const existing = this.db
       .prepare('SELECT id FROM transactions WHERE plaid_transaction_id = ?')

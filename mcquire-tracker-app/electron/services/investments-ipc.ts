@@ -141,7 +141,7 @@ export function registerInvestmentsIpcHandlers(
 // ─── Portfolio Excel generation ───────────────────────────────────────────────
 
 async function generatePortfolioExcel(
-  db: Database.Database,
+  _db: Database.Database,
   invService: PlaidInvestmentsService,
   syncFolder: string
 ): Promise<string> {
@@ -158,10 +158,9 @@ async function generatePortfolioExcel(
   const NAVY       = '1F3864'
   const LBLUE      = 'DCE6F1'
   const WHITE      = 'FFFFFF'
-  const GREEN_BG   = 'E2EFDA'
   const HEADER_FONT = { bold: true, color: { argb: 'FF' + WHITE } }
 
-  function headerRow(ws: ExcelJS.Worksheet, row: ExcelJS.Row, bgColor: string) {
+  function headerRow(_ws: ExcelJS.Worksheet, row: ExcelJS.Row, bgColor: string) {
     row.eachCell((cell) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bgColor } }
       cell.font = HEADER_FONT
@@ -170,7 +169,7 @@ async function generatePortfolioExcel(
     row.height = 18
   }
 
-  function stripeRow(ws: ExcelJS.Worksheet, row: ExcelJS.Row, idx: number) {
+  function stripeRow(_ws: ExcelJS.Worksheet, row: ExcelJS.Row, idx: number) {
     const bg = idx % 2 === 0 ? LBLUE : WHITE
     row.eachCell({ includeEmpty: true }, (cell) => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bg } }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback } from "react"
 
 function unwrap<T>(res: any, fallback: T): T {
   if (res === null || res === undefined) return fallback
@@ -54,7 +54,7 @@ export default function Transactions() {
   const [search, setSearch] = useState("")
   const [filterBucket, setFilterBucket] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
-  const [filterAccount, setFilterAccount] = useState("")
+  const [filterAccount, _setFilterAccount] = useState("")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [sortBy, setSortBy] = useState<"date" | "amount" | "merchant">("date")

@@ -549,7 +549,7 @@ async function bootstrapServices(folder: string): Promise<void> {
 
   // System tray
   const iconPath = path.join(__dirname, '../../resources/icon.ico')
-  lifecycle.setupTray(iconPath, () => syncScheduler.triggerSync?.())
+  lifecycle.setupTray(iconPath, () => { syncScheduler.syncNow().catch(console.error) })
 
   // Release lock and stop background services on quit
   app.on('before-quit', () => {

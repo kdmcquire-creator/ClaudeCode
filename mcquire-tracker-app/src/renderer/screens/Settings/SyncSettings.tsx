@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 
 export default function SyncSettings() {
   const [settings, setSettings] = useState<Record<string, string>>({})
@@ -8,25 +8,25 @@ export default function SyncSettings() {
   const [showPlaid, setShowPlaid] = useState(false)
 
   useEffect(() => {
-    window.api.getAllSettings().then(setSettings)
-    window.api.getSyncLog().then(setLog)
-    window.api.getPlaidCredentials().then(c => { if (c) setPlaidCreds({ ...plaidCreds, clientId: c.clientId, env: c.env }) })
+    window.api.db.getAllSettings().then(setSettings)
+    window.api.syncLog.list().then(setLog)
+    window.api.plaid.getConfig().then(c => { if (c) setPlaidCreds({ ...plaidCreds, clientId: c.client_id, env: c.env }) })
   }, [])
 
   const save = async (key: string, val: string) => {
-    await window.api.setSetting(key, val)
+    await window.api.db.setSetting(key, val)
     setSettings(s => ({ ...s, [key]: val }))
   }
 
   const syncNow = async () => {
     setSyncing(true)
-    await window.api.syncAll()
-    await window.api.getSyncLog().then(setLog)
+    await window.api.plaid.syncAll()
+    await window.api.syncLog.list().then(setLog)
     setSyncing(false)
   }
 
   const savePlaid = async () => {
-    await window.api.savePlaidCredentials(plaidCreds)
+    await window.api.plaid.saveConfig({ client_id: plaidCreds.clientId, secret: plaidCreds.secret, env: plaidCreds.env })
     setShowPlaid(false)
     alert("Plaid credentials saved.")
   }
