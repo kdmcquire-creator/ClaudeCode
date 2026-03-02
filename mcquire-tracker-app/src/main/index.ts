@@ -843,4 +843,71 @@ function registerAppIpcHandlers(): void {
     shell.showItemInFolder(filePath)
     return { success: true }
   })
+
+  // ── Settings helpers (used by Settings screens) ────────────────────────────
+
+  ipcMain.handle('settings:getAll', () => {
+    if (!db) return { success: true, data: {} }
+    const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>
+    return { success: true, data: Object.fromEntries(rows.map(r => [r.key, r.value])) }
+  })
+
+  ipcMain.handle('settings:set', (_event, key: string, value: string) => {
+    if (!db) return { success: false, error: 'DB not initialized' }
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
+    return { success: true }
+  })
+
+  // ── Email / SMTP (Settings → Notifications screen + Setup Wizard) ──────────
+
+  ipcMain.handle('settings:getSmtp', () => {
+    const { loadSmtpConfig } = require('../../electron/services/email-service')
+    const cfg = loadSmtpConfig()
+    if (!cfg) return { success: true, data: null }
+    return { success: true, data: { ...cfg, password: '••••••••' } }
+  })
+
+  ipcMain.handle('settings:saveSmtp', (_event, config: any) => {
+    const { storeSmtpConfig } = require('../../electron/services/email-service')
+    // Build canonical SmtpConfig from whatever the UI sends
+    const smtpType: string = config.type ?? 'gmail'
+    const host = config.host ?? (smtpType === 'gmail' ? 'smtp.gmail.com' : smtpType === 'outlook' ? 'smtp.office365.com' : 'smtp.gmail.com')
+    const port = config.port ?? (smtpType === 'gmail' ? 465 : 587)
+    const secure = config.secure ?? (smtpType === 'gmail')
+    storeSmtpConfig({ host, port, secure, user: config.email ?? config.user ?? '', password: config.password ?? '' })
+    const emailAddr = config.email ?? config.user ?? ''
+    if (emailAddr && db) {
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('notification_email', emailAddr)
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('settings:testEmail', async (_event, toEmail?: string) => {
+    const { sendTestEmail } = require('../../electron/services/email-service')
+    const emailAddr = toEmail ?? (db?.prepare("SELECT value FROM settings WHERE key = 'notification_email'").get() as any)?.value
+    if (!emailAddr) return { success: false, error: 'No email address configured' }
+    return await sendTestEmail(emailAddr)
+  })
+
+  // Legacy channels used by the setup wizard email step
+  ipcMain.handle('email:save-smtp', (_event, config: any) => {
+    const { storeSmtpConfig } = require('../../electron/services/email-service')
+    const smtpType: string = config.type ?? 'gmail'
+    const host = config.host ?? (smtpType === 'gmail' ? 'smtp.gmail.com' : smtpType === 'outlook' ? 'smtp.office365.com' : 'smtp.gmail.com')
+    const port = config.port ?? (smtpType === 'gmail' ? 465 : 587)
+    const secure = config.secure ?? (smtpType === 'gmail')
+    storeSmtpConfig({ host, port, secure, user: config.email ?? config.user ?? '', password: config.password ?? '' })
+    const emailAddr = config.email ?? config.user ?? ''
+    if (emailAddr && db) {
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run('notification_email', emailAddr)
+    }
+    return { success: true }
+  })
+
+  ipcMain.handle('email:send-test', async () => {
+    const { sendTestEmail } = require('../../electron/services/email-service')
+    const row = db?.prepare("SELECT value FROM settings WHERE key = 'notification_email'").get() as { value: string } | undefined
+    if (!row?.value) return { success: false, error: 'No email configured. Save SMTP settings first.' }
+    return await sendTestEmail(row.value)
+  })
 }

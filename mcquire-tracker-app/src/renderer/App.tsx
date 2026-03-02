@@ -29,9 +29,7 @@ export default function App() {
     } catch {}
 
     try {
-      if (window.api?.onLockWarning) {
-        window.api.onLockWarning(() => setLockWarning(true))
-      }
+      ;(window as any).electron?.ipcRenderer?.on('lifecycle:lock-conflict', () => setLockWarning(true))
     } catch {}
 
     try {

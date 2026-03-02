@@ -214,7 +214,7 @@ export class SyncScheduler {
 
   private async sendReviewEmail(pendingCount: number): Promise<void> {
     try {
-      const { EmailService } = require('./email.service')
+      const { EmailService } = require('./email-service')
       const email = this.getSetting('notification_email')
       if (!email) return
 
@@ -266,7 +266,7 @@ export class SyncScheduler {
 
   private async sendReauthEmail(institutions: string[]): Promise<void> {
     try {
-      const { EmailService } = require('./email.service')
+      const { EmailService } = require('./email-service')
       const email = this.getSetting('notification_email')
       if (!email) return
 
@@ -286,7 +286,7 @@ export class SyncScheduler {
 
   private async sendErrorEmail(errors: string[]): Promise<void> {
     try {
-      const { EmailService } = require('./email.service')
+      const { EmailService } = require('./email-service')
       const email = this.getSetting('notification_email')
       if (!email) return
 
