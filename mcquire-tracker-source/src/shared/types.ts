@@ -173,13 +173,26 @@ export interface ValidationResult {
 }
 
 export const P10_CATEGORIES = [
-  'Meals & Meetings - external',
-  'Travel',
-  'Lodging',
+  'Office Supplies/Equipment',
   'Telephone & Communication',
+  'Computer/Internet',
+  'Printing & Reproduction',
+  'Postage & Delivery',
+  'D&O insurance',
   'Dues & Subscriptions',
-  'Office Supplies & Expenses',
-  'Other - Executive Wellness'
+  'Meals & Meetings - internal',
+  'Meals & Meetings - external',
+  'Meals & Meetings - internal and external mixed attendees',
+  'Parking',
+  'Lodging',
+  'Travel',
+  'Sponsorships/Memberships',
+  'Rent',
+  'Salary',
+  'Legal',
+  'Insurance',
+  'Office furniture and other assets',
+  'Other',
 ] as const
 
 export const LLC_CATEGORIES = [

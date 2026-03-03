@@ -135,6 +135,7 @@ declare global {
       reports: {
         generateExpenseReport: (payload: any) => Promise<any>
         checkExpenseReportReadiness: () => Promise<any>
+        getBlockerTransactions: (payload?: { dateFrom?: string; dateTo?: string }) => Promise<any>
       }
       plaid: any
       accounts: any

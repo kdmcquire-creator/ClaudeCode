@@ -120,6 +120,35 @@ export function registerFinancialStatementsHandlers(
     }
   })
 
+  ipcMain.handle('reports:get-blocker-transactions', (_event, payload?: { dateFrom?: string; dateTo?: string }) => {
+    try {
+      const dateFrom = payload?.dateFrom ?? '2025-01-01'
+      const dateTo = payload?.dateTo ?? new Date().toISOString().substring(0, 10)
+      const meals = db.prepare(`
+        SELECT t.*, a.account_name, a.account_mask, a.institution
+        FROM transactions t JOIN accounts a ON a.id = t.account_id
+        WHERE t.bucket = 'Peak 10'
+          AND t.p10_category IN ('Meals & Meetings - external','Meals & Meetings - internal','Meals & Meetings - internal and external mixed attendees')
+          AND (t.description_notes IS NULL OR t.description_notes = '')
+          AND t.transaction_date >= ? AND t.transaction_date <= ?
+          AND t.review_status IN ('auto_classified','manually_classified')
+        ORDER BY t.transaction_date DESC
+      `).all(dateFrom, dateTo)
+      const attSplits = db.prepare(`
+        SELECT t.*, a.account_name, a.account_mask, a.institution
+        FROM transactions t JOIN accounts a ON a.id = t.account_id
+        WHERE t.bucket = 'Peak 10'
+          AND t.review_status = 'flagged'
+          AND t.flag_reason LIKE '%AT&T%split%'
+          AND t.transaction_date >= ? AND t.transaction_date <= ?
+        ORDER BY t.transaction_date DESC
+      `).all(dateFrom, dateTo)
+      return { success: true, data: { meals, attSplits } }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
   ipcMain.handle('reports:generate-expense-report', async (_event, payload: { dateFrom: string; dateTo: string; periodLabel?: string }) => {
     try {
       const { dateFrom, dateTo, periodLabel } = payload

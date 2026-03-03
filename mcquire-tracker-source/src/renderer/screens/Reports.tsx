@@ -21,6 +21,29 @@ interface Readiness {
   warnings: string[]
 }
 
+interface BlockerTx {
+  id: string
+  transaction_date: string
+  p10_category: string | null
+  merchant_name: string | null
+  description_raw: string
+  description_notes: string | null
+  amount: number
+  account_mask: string | null
+  account_name: string | null
+  flag_reason: string | null
+  review_status: string
+}
+
+const fmt = (n: number) =>
+  `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+const fmtDate = (s: string) => {
+  if (!s) return ""
+  const d = new Date(s + "T00:00:00")
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
 export default function Reports() {
   const [selectedReport, setSelectedReport] = useState<string | null>(null)
   const [periodLabel, setPeriodLabel] = useState("December 2025 – February 2026")
@@ -31,6 +54,14 @@ export default function Reports() {
   const [generating, setGenerating] = useState(false)
   const [lastGenerated, setLastGenerated] = useState<{ path: string; report: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Blocker modal state
+  const [showBlockerModal, setShowBlockerModal] = useState(false)
+  const [blockerMeals, setBlockerMeals] = useState<BlockerTx[]>([])
+  const [blockerAttSplits, setBlockerAttSplits] = useState<BlockerTx[]>([])
+  const [loadingBlockers, setLoadingBlockers] = useState(false)
+  const [noteDraft, setNoteDraft] = useState<Record<string, string>>({})
+  const [savingNote, setSavingNote] = useState<Record<string, boolean>>({})
 
   const checkReadiness = async () => {
     setCheckingReadiness(true)
@@ -62,6 +93,56 @@ export default function Reports() {
     }
   }, [selectedReport])
 
+  const openBlockerModal = async () => {
+    setShowBlockerModal(true)
+    setLoadingBlockers(true)
+    try {
+      const raw = await window.api.reports.getBlockerTransactions({ dateFrom, dateTo }).catch(() => null)
+      const result = unwrap<{ meals: BlockerTx[]; attSplits: BlockerTx[] } | null>(raw, null)
+      const meals = result?.meals ?? []
+      const atts = result?.attSplits ?? []
+      setBlockerMeals(meals)
+      setBlockerAttSplits(atts)
+      // Initialize note drafts from existing values
+      const drafts: Record<string, string> = {}
+      meals.forEach(tx => { drafts[tx.id] = tx.description_notes ?? "" })
+      setNoteDraft(drafts)
+    } catch {
+      // leave lists empty
+    } finally {
+      setLoadingBlockers(false)
+    }
+  }
+
+  const saveNote = async (txId: string) => {
+    const notes = noteDraft[txId] ?? ""
+    if (!notes.trim()) return
+    setSavingNote(prev => ({ ...prev, [txId]: true }))
+    try {
+      await window.api.transactions.classify(txId, {
+        description_notes: notes.trim(),
+        review_status: "manually_classified",
+      })
+      setBlockerMeals(prev => prev.filter(t => t.id !== txId))
+    } catch (e: any) {
+      alert("Save failed: " + (e?.message ?? "unknown"))
+    } finally {
+      setSavingNote(prev => ({ ...prev, [txId]: false }))
+    }
+  }
+
+  const saveAllNotes = async () => {
+    const toSave = blockerMeals.filter(tx => (noteDraft[tx.id] ?? "").trim())
+    for (const tx of toSave) {
+      await saveNote(tx.id)
+    }
+    // Re-run readiness after saving all
+    await checkReadiness()
+    if (blockerMeals.length === 0 && blockerAttSplits.length === 0) {
+      setShowBlockerModal(false)
+    }
+  }
+
   const generate = async () => {
     if (!selectedReport) return
     setGenerating(true)
@@ -72,32 +153,25 @@ export default function Reports() {
 
       switch (selectedReport) {
         case "expense_report":
-          // reports.generateExpenseReport — confirmed correct
           result = await window.api.reports.generateExpenseReport(payload)
           break
         case "pnl":
-          // statements.pandl — confirmed correct
           result = await window.api.statements.pandl(payload)
           break
         case "balance_sheet":
-          // statements.balanceSheet — confirmed correct
           result = await window.api.statements.balanceSheet(payload)
           break
         case "cashflow":
-          // statements.cashflow — confirmed correct
           result = await window.api.statements.cashflow(payload)
           break
         case "full_tracker":
-          // statements.fullTracker — confirmed correct
           result = await window.api.statements.fullTracker(payload)
           break
         case "personal_summary":
-          // statements.personalSummary — confirmed correct
           result = await window.api.statements.personalSummary(payload)
           break
       }
 
-      // Unwrap IPC response: could be { success, data: { filePath } } or { success, data: "/path" }
       const data = unwrap<any>(result, null)
       const filePath: string = data?.filePath ?? data?.file_path ?? (typeof data === "string" ? data : "") ?? ""
       if (data !== null && data !== undefined) {
@@ -202,9 +276,15 @@ export default function Reports() {
                   {readiness.blockers.length > 0 && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                       <p className="text-sm font-semibold text-red-700 mb-1">🚫 Blockers — resolve before generating:</p>
-                      <ul className="text-sm text-red-600 space-y-1">
+                      <ul className="text-sm text-red-600 space-y-1 mb-3">
                         {readiness.blockers.map((b, i) => <li key={i}>• {b}</li>)}
                       </ul>
+                      <button
+                        onClick={openBlockerModal}
+                        className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                      >
+                        Resolve Blockers
+                      </button>
                     </div>
                   )}
 
@@ -277,6 +357,144 @@ export default function Reports() {
       {!selectedReport && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-slate-400">
           Select a report type above to configure and generate
+        </div>
+      )}
+
+      {/* ── Blocker Resolution Modal ─────────────────────────────────────────── */}
+      {showBlockerModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl my-8">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Resolve Blockers</h2>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Add attendee names to clear the Meals &amp; Meetings blocker. AT&T splits must be resolved in the Review Queue.
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowBlockerModal(false); checkReadiness() }}
+                className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-6 py-4 space-y-6">
+              {loadingBlockers && (
+                <p className="text-sm text-slate-500 py-8 text-center">Loading transactions...</p>
+              )}
+
+              {/* Meals & Meetings — missing attendees */}
+              {!loadingBlockers && (
+                <>
+                  {blockerMeals.length > 0 ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-slate-700">
+                          Meals &amp; Meetings — missing attendee names ({blockerMeals.length})
+                        </h3>
+                        <button
+                          onClick={saveAllNotes}
+                          className="px-4 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg hover:bg-slate-900"
+                        >
+                          Save All
+                        </button>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase whitespace-nowrap">Date</th>
+                              <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase whitespace-nowrap">Category</th>
+                              <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase whitespace-nowrap">Merchant</th>
+                              <th className="text-left px-3 py-2 text-xs font-semibold text-red-500 uppercase whitespace-nowrap">Description / Notes ⚠</th>
+                              <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 uppercase whitespace-nowrap">Amount</th>
+                              <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase whitespace-nowrap">Account</th>
+                              <th className="px-3 py-2"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {blockerMeals.map(tx => {
+                              const isMissingNotes = !(noteDraft[tx.id] ?? "").trim()
+                              return (
+                                <tr key={tx.id} className={isMissingNotes ? "bg-red-50" : "bg-white"}>
+                                  <td className="px-3 py-2 whitespace-nowrap text-slate-700">{fmtDate(tx.transaction_date)}</td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-slate-600 text-xs">{tx.p10_category}</td>
+                                  <td className="px-3 py-2 text-slate-800 font-medium max-w-[180px] truncate">{tx.merchant_name || tx.description_raw}</td>
+                                  <td className="px-3 py-2 min-w-[220px]">
+                                    <input
+                                      type="text"
+                                      value={noteDraft[tx.id] ?? ""}
+                                      onChange={e => setNoteDraft(prev => ({ ...prev, [tx.id]: e.target.value }))}
+                                      placeholder="Names and titles of all attendees..."
+                                      className={`w-full border rounded px-2 py-1 text-sm ${
+                                        isMissingNotes
+                                          ? "border-red-400 bg-red-50 placeholder-red-300 focus:border-red-500"
+                                          : "border-slate-300 focus:border-blue-400"
+                                      } focus:outline-none`}
+                                    />
+                                  </td>
+                                  <td className="px-3 py-2 text-right whitespace-nowrap font-medium text-slate-800">{fmt(tx.amount)}</td>
+                                  <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+                                    {tx.account_mask ? `···${tx.account_mask}` : tx.account_name ?? ""}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <button
+                                      onClick={() => saveNote(tx.id)}
+                                      disabled={savingNote[tx.id] || isMissingNotes}
+                                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-40 whitespace-nowrap"
+                                    >
+                                      {savingNote[tx.id] ? "Saving..." : "Save"}
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">
+                      ✅ No Meals &amp; Meetings transactions with missing attendee names in this period.
+                    </div>
+                  )}
+
+                  {/* AT&T splits */}
+                  {blockerAttSplits.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                        AT&T bills pending split ({blockerAttSplits.length})
+                      </h3>
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-orange-800 space-y-2">
+                        <p className="font-medium">These must be resolved in the Review Queue — open each flagged AT&T charge and enter the Peak 10 line cost from att.com/billdetail.</p>
+                        <ul className="space-y-1">
+                          {blockerAttSplits.map(tx => (
+                            <li key={tx.id} className="flex justify-between">
+                              <span>{fmtDate(tx.transaction_date)} — {tx.merchant_name || tx.description_raw}</span>
+                              <span className="font-medium">{fmt(tx.amount)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Modal footer */}
+            <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => { setShowBlockerModal(false); checkReadiness() }}
+                className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-900"
+              >
+                Done — Re-check Readiness
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

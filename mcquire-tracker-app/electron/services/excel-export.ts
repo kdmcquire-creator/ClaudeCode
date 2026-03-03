@@ -258,7 +258,8 @@ export function validateExpenseReportReadiness(db: Database.Database, dateFrom: 
   // Check for Meals & Meetings with no description
   const missingDesc = db.prepare(`
     SELECT COUNT(*) as c FROM transactions
-    WHERE bucket='Peak 10' AND p10_category='Meals & Meetings - external'
+    WHERE bucket='Peak 10'
+    AND p10_category IN ('Meals & Meetings - external','Meals & Meetings - internal','Meals & Meetings - internal and external mixed attendees')
     AND (description_notes IS NULL OR description_notes = '')
     AND transaction_date >= ? AND transaction_date <= ?
     AND review_status IN ('auto_classified','manually_classified')
