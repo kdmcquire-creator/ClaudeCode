@@ -95,8 +95,13 @@ export async function openPlaidLink(
     // ── Load the HTML page with link token in query string ────────────────────
     // Strip "Electron/x.x.x" from the user agent — Plaid's browser detection
     // rejects Electron and shows a "download Chrome/Safari/Firefox" page.
-    const ua = win.webContents.getUserAgent().replace(/\s*Electron\/[\d.]+/, '')
-    win.webContents.setUserAgent(ua)
+    const stripElectron = (ua: string) => ua.replace(/\s*Electron\/[\d.]+/, '')
+    win.webContents.setUserAgent(stripElectron(win.webContents.getUserAgent()))
+
+    // Chase OAuth opens in a child popup window — strip Electron from those too.
+    win.webContents.on('did-create-window', (childWin) => {
+      childWin.webContents.setUserAgent(stripElectron(childWin.webContents.getUserAgent()))
+    })
 
     const htmlPath = getHtmlPath()
     const pageUrl = `file://${htmlPath}?token=${encodeURIComponent(linkToken)}`
