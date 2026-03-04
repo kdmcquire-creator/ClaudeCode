@@ -26,7 +26,14 @@ export function registerPlaidIpcHandlers(
       const linkToken = await plaid.createLinkToken()
       return { success: true, data: linkToken }
     } catch (err: any) {
-      return { success: false, error: err.message }
+      // Extract Plaid's actual error body (error_code + error_message) instead of
+      // the generic Axios "Request failed with status code 400" message.
+      const plaidBody = err?.response?.data
+      const detail = plaidBody
+        ? `${plaidBody.error_code}: ${plaidBody.error_message}`
+        : err.message
+      console.error('[Plaid] createLinkToken failed:', detail, plaidBody)
+      return { success: false, error: detail }
     }
   })
 
