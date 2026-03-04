@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build && electron-builder",
-    "build:unpackaged": "electron-vite build && electron-builder --dir",
+    "build:unpackaged": "taskkill /F /IM \"McQuire Tracker.exe\" /T 2>nul & rmdir /S /Q dist-installer 2>nul & electron-vite build && electron-builder --dir",
     "typecheck": "tsc --noEmit",
     "preview": "electron-vite preview"
   },

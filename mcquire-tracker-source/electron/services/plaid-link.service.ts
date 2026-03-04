@@ -48,6 +48,26 @@ export async function openPlaidLink(
     const cleanUA = plaidSession.getUserAgent().replace(/\s*Electron\/[\d.]+/, '')
     plaidSession.setUserAgent(cleanUA)
 
+    // Sec-CH-UA Client Hints fix — the UA string change above covers the
+    // User-Agent HTTP header and navigator.userAgent, but Chromium separately
+    // sends Sec-CH-UA headers that only list "Chromium" (no "Google Chrome").
+    // Banks check this. Patch it at the network level for all requests in the
+    // session so it applies to both the Plaid window and any OAuth popups.
+    const chromeVersion = cleanUA.match(/Chrome\/([\d]+)/)?.[1] ?? '120'
+    plaidSession.webRequest.onBeforeSendHeaders((details, callback) => {
+      const headers = { ...details.requestHeaders }
+      for (const key of Object.keys(headers)) {
+        const lk = key.toLowerCase()
+        if (lk === 'sec-ch-ua' && !headers[key].includes('Google Chrome')) {
+          headers[key] = `"Not A Brand";v="8", "Chromium";v="${chromeVersion}", "Google Chrome";v="${chromeVersion}"`
+        } else if (lk === 'sec-ch-ua-full-version-list' && !headers[key].includes('Google Chrome')) {
+          const fullVer = cleanUA.match(/Chrome\/([\d.]+)/)?.[1] ?? `${chromeVersion}.0.0.0`
+          headers[key] = `"Not A Brand";v="8.0.0.0", "Chromium";v="${fullVer}", "Google Chrome";v="${fullVer}"`
+        }
+      }
+      callback({ requestHeaders: headers })
+    })
+
     // ── Create the Plaid Link window ──────────────────────────────────────────
     const win = new BrowserWindow({
       width: 520,
