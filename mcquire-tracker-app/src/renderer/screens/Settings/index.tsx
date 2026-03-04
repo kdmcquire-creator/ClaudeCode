@@ -208,6 +208,12 @@ function AccountsTab() {
     load()
   }
 
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Permanently remove "${name}"? Historical transactions are kept.`)) return
+    try { await window.api.accounts.delete(id) } catch {}
+    load()
+  }
+
   if (loading) return <div className="text-slate-500">Loading accounts...</div>
 
   return (
@@ -264,8 +270,9 @@ function AccountsTab() {
                 </button>
               )}
               {a.is_active
-                ? <button onClick={() => handleDisable(a.id)} className="text-xs text-slate-400 hover:text-red-500 underline">Disable</button>
+                ? <button onClick={() => handleDisable(a.id)} className="text-xs text-slate-400 hover:text-orange-500 underline">Disable</button>
                 : <span className="text-xs text-slate-300">Disabled</span>}
+              <button onClick={() => handleDelete(a.id, a.account_name ?? a.institution)} className="text-xs text-slate-400 hover:text-red-600 underline">Remove</button>
             </div>
           </div>
         ))}
