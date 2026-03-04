@@ -3,30 +3,32 @@
 // Opens a child BrowserWindow that loads the local Plaid Link HTML page,
 // waits for the user to complete (or close) the flow, then resolves/rejects.
 //
-// The window uses a dedicated preload (plaid-link-preload.ts) to expose a
-// minimal contextBridge so the HTML page can send IPC messages to main.
+// OAUTH REDIRECT FLOW (used by Chase and other OAuth institutions):
+//   Plaid Link running in a file:// page cannot create a trusted popup, so
+//   it uses redirect mode — navigating the window directly to the bank's
+//   OAuth page. The flow requires a redirect_uri in the link token, which
+//   Plaid's server uses to send the oauth_state_id back after the user
+//   authenticates. We intercept that navigation via will-navigate and reload
+//   the Plaid Link page with received_redirect_uri so handler.open() can
+//   complete the connection.
+//
+//   REQUIRED: Register 'mcquire-tracker://plaid-oauth-callback' as an allowed
+//   redirect URI in the Plaid developer dashboard (Link → OAuth settings).
 //
 // DEPLOY:
 //   1. Copy this file → electron/services/plaid-link.service.ts
 //   2. Copy plaid-link-preload.ts → electron/preload/plaid-link-preload.ts
 //   3. Copy plaid-link.html → resources/plaid-link.html
-//   4. In electron-vite / electron-builder config, ensure resources/** is packed.
-//      The package.json already has "files": ["dist-electron/**/*", "dist/**/*", "resources/**/*"]
-//      so this is already covered.
+//   4. Ensure resources/** is packed (already covered by package.json "files").
 
 import { BrowserWindow, ipcMain, app, session } from 'electron'
 import path from 'path'
 import type { PlaidLinkResult } from '../../src/shared/plaid.types'
 
-// Resolved path to the preload script.
-// In dev: src is compiled by electron-vite into dist-electron/preload/
-// In prod: same location inside the asar
 function getPreloadPath(): string {
-  // electron-vite outputs preload files here:
   return path.join(app.getAppPath(), 'dist-electron', 'preload', 'plaid-link-preload.js')
 }
 
-// Path to the static HTML page in resources/
 function getHtmlPath(): string {
   return path.join(app.getAppPath(), 'resources', 'plaid-link.html')
 }
@@ -36,33 +38,41 @@ export async function openPlaidLink(
   institutionNameHint?: string
 ): Promise<PlaidLinkResult> {
   return new Promise<PlaidLinkResult>((resolve, reject) => {
-    // ── Dedicated session with clean user agent ───────────────────────────────
-    // Each call gets a fresh in-memory session (no persistence, no stale OAuth
-    // state from a previous failed attempt). The user agent has Electron stripped
-    // so Chase and other banks don't show the "download a real browser" page.
-    // Setting it on the SESSION (not just the window) means it applies to ALL
-    // requests — including child windows opened by Plaid for OAuth popups —
-    // before any navigation starts, avoiding the did-create-window timing race.
+    // ── Dedicated session — clean user agent + fixed Client Hints ─────────────
+    // Each call gets a fresh in-memory session (no stale OAuth state from a
+    // previous failed attempt).
+    //
+    // Chase requires Chrome 130+. Electron 28 ships with Chromium 120.
+    // We bump the version to 132 and present as a standard Chrome release.
+    // This affects:
+    //   • User-Agent HTTP header           (session.setUserAgent)
+    //   • navigator.userAgent in JS        (session.setUserAgent)
+    //   • Sec-CH-UA / Sec-CH-UA-Full-Version-List (webRequest hook below)
+    //
+    // Setting everything on the SESSION means it applies before any navigation
+    // starts — covering both this window and any OAuth popup windows that share
+    // the session (via setWindowOpenHandler below).
     const partitionKey = `plaid-link-${Date.now()}`
     const plaidSession = session.fromPartition(partitionKey, { cache: false })
-    const cleanUA = plaidSession.getUserAgent().replace(/\s*Electron\/[\d.]+/, '')
+
+    const CHROME_VER = '132'
+    const CHROME_FULL = '132.0.6834.83'
+    const cleanUA = plaidSession
+      .getUserAgent()
+      .replace(/\s*Electron\/[\d.]+/, '')
+      .replace(/Chrome\/[\d.]+/, `Chrome/${CHROME_FULL}`)
     plaidSession.setUserAgent(cleanUA)
 
-    // Sec-CH-UA Client Hints fix — the UA string change above covers the
-    // User-Agent HTTP header and navigator.userAgent, but Chromium separately
-    // sends Sec-CH-UA headers that only list "Chromium" (no "Google Chrome").
-    // Banks check this. Patch it at the network level for all requests in the
-    // session so it applies to both the Plaid window and any OAuth popups.
-    const chromeVersion = cleanUA.match(/Chrome\/([\d]+)/)?.[1] ?? '120'
+    // Sec-CH-UA Client Hints: Electron omits "Google Chrome" from the brand
+    // list. Patch all relevant headers for every request in this session.
     plaidSession.webRequest.onBeforeSendHeaders((details, callback) => {
       const headers = { ...details.requestHeaders }
       for (const key of Object.keys(headers)) {
         const lk = key.toLowerCase()
-        if (lk === 'sec-ch-ua' && !headers[key].includes('Google Chrome')) {
-          headers[key] = `"Not A Brand";v="8", "Chromium";v="${chromeVersion}", "Google Chrome";v="${chromeVersion}"`
-        } else if (lk === 'sec-ch-ua-full-version-list' && !headers[key].includes('Google Chrome')) {
-          const fullVer = cleanUA.match(/Chrome\/([\d.]+)/)?.[1] ?? `${chromeVersion}.0.0.0`
-          headers[key] = `"Not A Brand";v="8.0.0.0", "Chromium";v="${fullVer}", "Google Chrome";v="${fullVer}"`
+        if (lk === 'sec-ch-ua') {
+          headers[key] = `"Not A Brand";v="8", "Chromium";v="${CHROME_VER}", "Google Chrome";v="${CHROME_VER}"`
+        } else if (lk === 'sec-ch-ua-full-version-list') {
+          headers[key] = `"Not A Brand";v="8.0.0.0", "Chromium";v="${CHROME_FULL}", "Google Chrome";v="${CHROME_FULL}"`
         }
       }
       callback({ requestHeaders: headers })
@@ -84,8 +94,8 @@ export async function openPlaidLink(
       },
     })
 
-    // Force any popup windows opened by Plaid (Chase OAuth, etc.) into the same
-    // session so they also get the clean user agent.
+    // Force any popup windows opened by Plaid into the same session so they
+    // also get the patched UA and Client Hints headers.
     win.webContents.setWindowOpenHandler(() => ({
       action: 'allow',
       overrideBrowserWindowOptions: {
@@ -98,6 +108,24 @@ export async function openPlaidLink(
       },
     }))
 
+    // ── OAuth redirect callback interception ──────────────────────────────────
+    // For OAuth institutions (Chase), Plaid uses redirect mode: it navigates
+    // THIS window to the bank, then after authentication the bank → Plaid's
+    // server → our redirect_uri (mcquire-tracker://plaid-oauth-callback?...).
+    // Intercept that final navigation before it fails, then reload the Plaid
+    // Link HTML with received_redirect_uri so handler.open() can finish.
+    win.webContents.on('will-navigate', (event, url) => {
+      if (url.startsWith('mcquire-tracker://plaid-oauth-callback')) {
+        event.preventDefault()
+        const htmlPath = getHtmlPath()
+        const resumeUrl =
+          `file://${htmlPath}` +
+          `?token=${encodeURIComponent(linkToken)}` +
+          `&received_redirect_uri=${encodeURIComponent(url)}`
+        win.loadURL(resumeUrl)
+      }
+    })
+
     let settled = false
 
     function settle(fn: () => void) {
@@ -108,15 +136,11 @@ export async function openPlaidLink(
     }
 
     function cleanup() {
-      // Remove our IPC listeners — always use the channel+listener form so we
-      // don't remove other handlers that use the same channel name elsewhere.
       ipcMain.removeListener('plaid-link:success', onSuccess)
       ipcMain.removeListener('plaid-link:exit', onExit)
       ipcMain.removeListener('plaid-link:error', onError)
       if (!win.isDestroyed()) win.close()
     }
-
-    // ── IPC handlers for this window session ──────────────────────────────────
 
     const onSuccess = (_event: Electron.IpcMainEvent, result: PlaidLinkResult) => {
       settle(() => resolve(result))
@@ -134,17 +158,12 @@ export async function openPlaidLink(
     ipcMain.on('plaid-link:exit', onExit)
     ipcMain.on('plaid-link:error', onError)
 
-    // ── Handle window closed by user (X button) ───────────────────────────────
     win.on('closed', () => {
       settle(() => reject(new Error('Plaid Link window was closed without completing')))
     })
 
-    // ── Load the HTML page with link token in query string ────────────────────
     const htmlPath = getHtmlPath()
     const pageUrl = `file://${htmlPath}?token=${encodeURIComponent(linkToken)}`
     win.loadURL(pageUrl)
-
-    // Open DevTools in dev for debugging — comment out for production
-    // if (!app.isPackaged) win.webContents.openDevTools({ mode: 'detach' })
   })
 }

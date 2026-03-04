@@ -144,6 +144,13 @@ export class PlaidService {
       products: [Products.Transactions],
       country_codes: [CountryCode.Us],
       language: 'en',
+      // Required for OAuth institutions (Chase, etc.) in redirect mode.
+      // After the user authenticates, Plaid sends the oauth_state_id to this
+      // URI. Electron intercepts the navigation via will-navigate in the Plaid
+      // Link window and reloads the page with received_redirect_uri.
+      // IMPORTANT: This URI must be registered in the Plaid dashboard under
+      // Link → OAuth settings → Allowed redirect URIs.
+      redirect_uri: 'mcquire-tracker://plaid-oauth-callback',
     })
     return response.data.link_token
   }
@@ -156,6 +163,7 @@ export class PlaidService {
       access_token: accessToken,
       country_codes: [CountryCode.Us],
       language: 'en',
+      redirect_uri: 'mcquire-tracker://plaid-oauth-callback',
     })
     return response.data.link_token
   }

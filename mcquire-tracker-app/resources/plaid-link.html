@@ -57,9 +57,12 @@
 
   <script>
     (function () {
-      // Read link token from query string — set by plaid-link.service.ts when loading this page
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get('token');
+      var params = new URLSearchParams(window.location.search);
+      var token = params.get('token');
+      // Set when returning from an OAuth redirect (Chase, etc.).
+      // plaid-link.service.ts intercepts the mcquire-tracker:// callback and
+      // reloads this page with the full callback URL as received_redirect_uri.
+      var receivedRedirectUri = params.get('received_redirect_uri');
 
       function showError(msg) {
         document.getElementById('status').innerHTML =
@@ -79,15 +82,23 @@
         return;
       }
 
+      if (receivedRedirectUri) {
+        // Returning from bank OAuth — update status message while Plaid
+        // exchanges the oauth_state_id in the background.
+        document.getElementById('status').innerHTML =
+          '<div class="spinner"></div>' +
+          '<h2>Finishing connection...</h2>' +
+          '<p>Verifying with your bank. Please wait.</p>';
+      }
+
       try {
-        var handler = window.Plaid.create({
+        var handlerConfig = {
           token: token,
 
           onSuccess: function (public_token, metadata) {
             document.getElementById('status').innerHTML =
-              '<h2>✅ Connected!</h2><p>Closing window...</p>';
+              '<h2>Connected!</h2><p>Closing window...</p>';
 
-            // Build the result matching PlaidLinkResult type
             var result = {
               public_token: public_token,
               institution_id: (metadata.institution && metadata.institution.institution_id) || '',
@@ -103,7 +114,6 @@
               }),
             };
 
-            // Send to main process via preload bridge
             if (window.plaidBridge) {
               window.plaidBridge.sendSuccess(result);
             } else {
@@ -112,10 +122,7 @@
           },
 
           onExit: function (err, metadata) {
-            // User closed Plaid Link (hit X, or an error occurred)
             if (err) {
-              // Non-fatal: user cancelled, or institution unavailable
-              // Don't show an error — just signal exit so the window closes cleanly
               console.warn('[PlaidLink] Exit with error:', err);
             }
             if (window.plaidBridge) {
@@ -124,12 +131,18 @@
           },
 
           onEvent: function (eventName, metadata) {
-            // Optional: log events for debugging
             console.log('[PlaidLink] Event:', eventName, metadata);
           },
-        });
+        };
 
-        // Open Plaid Link immediately
+        // If returning from an OAuth redirect, pass received_redirect_uri so
+        // Plaid Link can exchange the oauth_state_id and complete the flow.
+        if (receivedRedirectUri) {
+          handlerConfig.receivedRedirectUri = receivedRedirectUri;
+        }
+
+        var handler = window.Plaid.create(handlerConfig);
+
         handler.open();
 
       } catch (e) {
