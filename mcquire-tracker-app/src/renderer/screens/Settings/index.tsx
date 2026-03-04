@@ -124,6 +124,9 @@ function AccountsTab() {
   const [msg, setMsg] = useState<string | null>(null)
   const [msgType, setMsgType] = useState<"success"|"error">("success")
   const [pendingLink, setPendingLink] = useState<{ public_token: string; institution_id: string; institution_name: string; accounts: RawPlaidAccount[] } | null>(null)
+  const [editingAccount, setEditingAccount] = useState<any | null>(null)
+  const [editEntity, setEditEntity] = useState("")
+  const [editBucket, setEditBucket] = useState("")
 
   const showMsg = (text: string, type: "success"|"error" = "success") => { setMsg(text); setMsgType(type) }
 
@@ -214,10 +217,55 @@ function AccountsTab() {
     load()
   }
 
+  const openEdit = (a: any) => {
+    setEditingAccount(a)
+    setEditEntity(a.entity ?? "Personal")
+    setEditBucket(a.default_bucket ?? "")
+  }
+
+  const handleUpdate = async () => {
+    if (!editingAccount) return
+    try {
+      await window.api.accounts.update({ id: editingAccount.id, entity: editEntity, default_bucket: editBucket })
+      showMsg("Account updated.", "success")
+    } catch (e: any) {
+      showMsg("Update failed: " + (e?.message ?? "unknown"), "error")
+    }
+    setEditingAccount(null)
+    load()
+  }
+
   if (loading) return <div className="text-slate-500">Loading accounts...</div>
 
   return (
     <div className="space-y-5">
+      {editingAccount && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setEditingAccount(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-[380px] p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold text-slate-800 mb-1">{editingAccount.account_name}</h3>
+            <p className="text-xs text-slate-500 mb-4">{editingAccount.institution} ···{editingAccount.account_mask}</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-1">Entity</label>
+                <select value={editEntity} onChange={e => setEditEntity(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                  {ENTITIES.map(en => <option key={en} value={en}>{en}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 block mb-1">Default Bucket</label>
+                <select value={editBucket} onChange={e => setEditBucket(e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                  <option value="">No default (follow rules)</option>
+                  {["Peak 10", "Moonsmoke LLC", "Personal", "Watersound Investments LLC"].map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5 justify-end">
+              <button onClick={() => setEditingAccount(null)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800">Cancel</button>
+              <button onClick={handleUpdate} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
       {pendingLink && (
         <AccountAssignmentModal
           institutionName={pendingLink.institution_name}
@@ -269,6 +317,7 @@ function AccountsTab() {
                   ⚠️ Re-authenticate
                 </button>
               )}
+              <button onClick={() => openEdit(a)} className="text-xs text-blue-600 hover:underline">Edit</button>
               {a.is_active
                 ? <button onClick={() => handleDisable(a.id)} className="text-xs text-slate-400 hover:text-orange-500 underline">Disable</button>
                 : <span className="text-xs text-slate-300">Disabled</span>}
