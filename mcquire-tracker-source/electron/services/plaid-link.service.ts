@@ -14,7 +14,7 @@
 //      The package.json already has "files": ["dist-electron/**/*", "dist/**/*", "resources/**/*"]
 //      so this is already covered.
 
-import { BrowserWindow, ipcMain, app } from 'electron'
+import { BrowserWindow, ipcMain, app, session } from 'electron'
 import path from 'path'
 import type { PlaidLinkResult } from '../../src/shared/plaid.types'
 
@@ -36,6 +36,18 @@ export async function openPlaidLink(
   institutionNameHint?: string
 ): Promise<PlaidLinkResult> {
   return new Promise<PlaidLinkResult>((resolve, reject) => {
+    // ── Dedicated session with clean user agent ───────────────────────────────
+    // Each call gets a fresh in-memory session (no persistence, no stale OAuth
+    // state from a previous failed attempt). The user agent has Electron stripped
+    // so Chase and other banks don't show the "download a real browser" page.
+    // Setting it on the SESSION (not just the window) means it applies to ALL
+    // requests — including child windows opened by Plaid for OAuth popups —
+    // before any navigation starts, avoiding the did-create-window timing race.
+    const partitionKey = `plaid-link-${Date.now()}`
+    const plaidSession = session.fromPartition(partitionKey, { cache: false })
+    const cleanUA = plaidSession.getUserAgent().replace(/\s*Electron\/[\d.]+/, '')
+    plaidSession.setUserAgent(cleanUA)
+
     // ── Create the Plaid Link window ──────────────────────────────────────────
     const win = new BrowserWindow({
       width: 520,
@@ -48,8 +60,23 @@ export async function openPlaidLink(
         contextIsolation: true,
         sandbox: false, // required so the preload can use ipcRenderer
         preload: getPreloadPath(),
+        partition: partitionKey,
       },
     })
+
+    // Force any popup windows opened by Plaid (Chase OAuth, etc.) into the same
+    // session so they also get the clean user agent.
+    win.webContents.setWindowOpenHandler(() => ({
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        webPreferences: {
+          partition: partitionKey,
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: false,
+        },
+      },
+    }))
 
     let settled = false
 
@@ -93,16 +120,6 @@ export async function openPlaidLink(
     })
 
     // ── Load the HTML page with link token in query string ────────────────────
-    // Strip "Electron/x.x.x" from the user agent — Plaid's browser detection
-    // rejects Electron and shows a "download Chrome/Safari/Firefox" page.
-    const stripElectron = (ua: string) => ua.replace(/\s*Electron\/[\d.]+/, '')
-    win.webContents.setUserAgent(stripElectron(win.webContents.getUserAgent()))
-
-    // Chase OAuth opens in a child popup window — strip Electron from those too.
-    win.webContents.on('did-create-window', (childWin) => {
-      childWin.webContents.setUserAgent(stripElectron(childWin.webContents.getUserAgent()))
-    })
-
     const htmlPath = getHtmlPath()
     const pageUrl = `file://${htmlPath}?token=${encodeURIComponent(linkToken)}`
     win.loadURL(pageUrl)
