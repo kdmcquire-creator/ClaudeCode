@@ -406,6 +406,7 @@ export class PlaidService {
       description_raw: tx.name,
       merchant_name: tx.merchant_name || tx.name,
       amount: tx.amount, // Plaid: positive = debit
+      account_mask: account.account_mask, // required by ruleMatches for account_mask_filter rules
       category_source: tx.personal_finance_category?.primary || null,
       bucket: null,
       p10_category: null,
@@ -426,8 +427,9 @@ export class PlaidService {
       const rules = loadActiveRules(this.db)
       const result = classifyTransaction(rawTx, rules, this.db)
       Object.assign(rawTx, result)
-    } catch {
-      // Classification engine unavailable — leave as pending_review
+    } catch (err) {
+      console.error('[PlaidService] Classification error for tx:', rawTx.description_raw, err)
+      // Leave as pending_review
     }
 
     this.db

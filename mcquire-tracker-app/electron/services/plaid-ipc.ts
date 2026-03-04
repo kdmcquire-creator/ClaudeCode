@@ -11,6 +11,7 @@ import { PlaidService } from './plaid.service'
 import { openPlaidLink } from './plaid-link.service'
 import { SyncScheduler } from './sync-scheduler.service'
 import { IPC } from '../../src/shared/plaid.types'
+import { reclassifyPendingAfterRuleChange } from './classification-engine'
 
 export function registerPlaidIpcHandlers(
   db: Database.Database,
@@ -112,9 +113,15 @@ export function registerPlaidIpcHandlers(
         return { success: false, error: 'Sync already in progress.' }
       }
       const results = await scheduler.syncNow()
+      // Re-run rules against all pending_review transactions (catches newly imported + any
+      // previously imported before rules were last updated)
+      const { resolved } = reclassifyPendingAfterRuleChange(db)
+      console.log(`[Sync] reclassify pass resolved ${resolved} pending transactions`)
       // Convert Map to plain object for IPC serialization
       const serialized: Record<string, any> = {}
-      results.forEach((v, k) => { serialized[k] = v })
+      if (results && typeof results.forEach === 'function') {
+        results.forEach((v, k) => { serialized[k] = v })
+      }
       return { success: true, data: serialized }
     } catch (err: any) {
       return { success: false, error: err.message }
@@ -124,6 +131,9 @@ export function registerPlaidIpcHandlers(
   ipcMain.handle(IPC.PLAID_SYNC_ACCOUNT, async (_event, plaidItemId: string) => {
     try {
       const result = await plaid.syncItem(plaidItemId)
+      // Re-run rules against pending transactions after single-account sync
+      const { resolved } = reclassifyPendingAfterRuleChange(db)
+      console.log(`[Sync] reclassify pass resolved ${resolved} pending transactions`)
       return { success: true, data: result }
     } catch (err: any) {
       return { success: false, error: err.message }
