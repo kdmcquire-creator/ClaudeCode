@@ -93,7 +93,11 @@ export async function openPlaidLink(
     })
 
     // ── Load the HTML page with link token in query string ────────────────────
-    // The page reads window.location.search to get the token, then initializes Plaid Link.
+    // Strip "Electron/x.x.x" from the user agent — Plaid's browser detection
+    // rejects Electron and shows a "download Chrome/Safari/Firefox" page.
+    const ua = win.webContents.getUserAgent().replace(/\s*Electron\/[\d.]+/, '')
+    win.webContents.setUserAgent(ua)
+
     const htmlPath = getHtmlPath()
     const pageUrl = `file://${htmlPath}?token=${encodeURIComponent(linkToken)}`
     win.loadURL(pageUrl)
