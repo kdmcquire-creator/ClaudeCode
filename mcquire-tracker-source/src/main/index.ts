@@ -712,6 +712,7 @@ function registerAppIpcHandlers(): void {
          FROM transactions t
          JOIN accounts a ON a.id = t.account_id
          WHERE t.review_status IN ('pending_review', 'flagged')
+           AND t.is_split_child = 0
          ORDER BY t.transaction_date DESC
          LIMIT 200`
       )

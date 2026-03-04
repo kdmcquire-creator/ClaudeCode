@@ -280,8 +280,11 @@ export default function ReviewQueue({ onPendingChange }: Props) {
                 </div>
                 <div className="text-right shrink-0">
                   <div className={`font-bold text-lg ${tx.amount < 0 ? "text-green-600" : "text-slate-800"}`}>
-                    {tx.amount < 0 ? "+" : ""}{fmt(tx.amount)}
+                    {tx.amount < 0 ? "-" : ""}{fmt(tx.amount)}
                   </div>
+                  {tx.amount < 0 && (
+                    <div className="text-xs text-green-600 font-medium mt-0.5">Credit / Refund</div>
+                  )}
                   <div className="text-xs text-slate-400 mt-0.5">{isExpanded ? "▲ collapse" : "▼ expand"}</div>
                 </div>
               </div>
