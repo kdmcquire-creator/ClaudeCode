@@ -5,8 +5,8 @@ type Tab = "accounts" | "rules" | "sync" | "notifications"
 const RULE_SECTIONS = ["llc_always", "p10_always", "p10_conditional", "personal_override", "special", "ask_kyle"]
 const RULE_ACTIONS = ["classify", "ask_kyle", "exclude", "split_flag"]
 const MATCH_TYPES = ["contains", "exact", "starts_with", "regex"]
-const BUCKETS = ["Peak 10", "Moonsmoke LLC", "Personal", "Exclude"]
-const ENTITIES = ["Personal", "Moonsmoke LLC", "Peak 10"]
+const BUCKETS = ["Peak 10", "Moonsmoke LLC", "Personal", "Watersound Investments LLC", "Exclude"]
+const ENTITIES = ["Personal", "Moonsmoke LLC", "Peak 10", "Watersound Investments LLC"]
 const P10_CATEGORIES = [
   "Meals & Meetings - external", "Travel", "Lodging", "Dues & Subscriptions",
   "Office Supplies & Expenses", "Telephone & Communication", "Other - Executive Wellness",
@@ -96,7 +96,8 @@ function AccountAssignmentModal({ institutionName, rawAccounts, onConfirm, onCan
                 <div>
                   <label className="text-xs font-semibold text-slate-500 block mb-1">Default Bucket</label>
                   <select value={a.default_bucket} onChange={e => update(i, "default_bucket", e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                    {["Peak 10", "Moonsmoke LLC", "Personal"].map(b => <option key={b} value={b}>{b}</option>)}
+                    <option value="">No default (follow rules)</option>
+                    {["Peak 10", "Moonsmoke LLC", "Personal", "Watersound Investments LLC"].map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
               </div>

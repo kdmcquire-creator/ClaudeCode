@@ -15,6 +15,7 @@ interface Props {
 const bucketColor: Record<string, string> = {
   "Peak 10": "bg-blue-100 text-blue-800",
   "Moonsmoke LLC": "bg-green-100 text-green-800",
+  "Watersound Investments LLC": "bg-purple-100 text-purple-800",
   Personal: "bg-gray-100 text-gray-700",
   Exclude: "bg-red-100 text-red-700",
 }
@@ -102,7 +103,7 @@ export default function ReviewQueue({ onPendingChange }: Props) {
       if (cs.createRule && cs.bucket !== "Exclude") {
         const rule: any = {
           rule_name: `${tx.merchant_name ?? tx.description_raw} — ${cs.bucket}`,
-          section: cs.bucket === "Peak 10" ? "p10_always" : cs.bucket === "Moonsmoke LLC" ? "llc_always" : "personal_override",
+          section: cs.bucket === "Peak 10" ? "p10_always" : cs.bucket === "Moonsmoke LLC" ? "llc_always" : cs.bucket === "Watersound Investments LLC" ? "llc_always" : "personal_override",
           match_type: "contains",
           match_value: (tx.merchant_name ?? tx.description_raw ?? "").toLowerCase(),
           bucket: cs.bucket,
@@ -173,7 +174,7 @@ export default function ReviewQueue({ onPendingChange }: Props) {
   const handleBatchClassify = async () => {
     const ids = Array.from(selected)
     if (ids.length === 0) return
-    const bucket = prompt("Bucket for all selected (Peak 10 / Moonsmoke LLC / Personal / Exclude):")
+    const bucket = prompt("Bucket for all selected (Peak 10 / Moonsmoke LLC / Personal / Watersound Investments LLC / Exclude):")
     if (!bucket) return
     for (const id of ids) {
       try {
@@ -339,7 +340,7 @@ export default function ReviewQueue({ onPendingChange }: Props) {
                   <div>
                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">Classify As</label>
                     <div className="flex gap-2 flex-wrap">
-                      {["Peak 10", "Moonsmoke LLC", "Personal", "Exclude"].map(b => (
+                      {["Peak 10", "Moonsmoke LLC", "Personal", "Watersound Investments LLC", "Exclude"].map(b => (
                         <button
                           key={b}
                           onClick={() => setCs(tx.id, { bucket: b, category: "", llcCategory: "" })}

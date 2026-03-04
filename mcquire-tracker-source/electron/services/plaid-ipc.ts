@@ -183,6 +183,15 @@ export function registerPlaidIpcHandlers(
     }
   })
 
+  ipcMain.handle(IPC.ACCOUNTS_DELETE, async (_event, accountId: string) => {
+    try {
+      db.prepare("DELETE FROM accounts WHERE id = ?").run(accountId)
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
   // ─── Plaid Items ──────────────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.PLAID_ITEMS_LIST, async () => {

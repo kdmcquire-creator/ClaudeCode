@@ -21,8 +21,8 @@ export interface Account {
   account_name: string
   account_mask: string
   account_type: 'depository' | 'credit' | 'investment' | 'brokerage'
-  entity: 'Personal' | 'Moonsmoke LLC' | 'Peak 10'
-  default_bucket: 'Personal' | 'Moonsmoke LLC' | 'Peak 10'
+  entity: 'Personal' | 'Moonsmoke LLC' | 'Peak 10' | 'Watersound Investments LLC'
+  default_bucket: 'Personal' | 'Moonsmoke LLC' | 'Peak 10' | 'Watersound Investments LLC' | ''
   import_method: 'plaid' | 'watched_folder'
   watched_folder_path: string | null
   is_active: number

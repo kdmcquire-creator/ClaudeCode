@@ -1,5 +1,5 @@
 
-export type Bucket = 'Peak 10' | 'Moonsmoke LLC' | 'Personal' | 'Exclude'
+export type Bucket = 'Peak 10' | 'Moonsmoke LLC' | 'Personal' | 'Watersound Investments LLC' | 'Exclude'
 export type ReviewStatus = 'pending_review' | 'auto_classified' | 'manually_classified' | 'flagged'
 export type ImportMethod = 'plaid' | 'watched_folder'
 export type RuleSection = 'llc_always' | 'p10_always' | 'p10_conditional' | 'personal_override' | 'special' | 'ask_kyle' | 'exclusion'
@@ -15,7 +15,7 @@ export interface Account {
   account_mask: string
   account_type: 'depository' | 'credit' | 'investment' | 'brokerage'
   entity: string
-  default_bucket: Bucket
+  default_bucket: Bucket | ''
   import_method: ImportMethod
   watched_folder_path: string | null
   is_active: number

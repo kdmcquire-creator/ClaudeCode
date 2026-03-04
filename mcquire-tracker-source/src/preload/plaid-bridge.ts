@@ -74,6 +74,7 @@ export const accountsBridge = {
   list: () => ipcRenderer.invoke(IPC.ACCOUNTS_LIST),
   update: (account: any) => ipcRenderer.invoke(IPC.ACCOUNTS_UPDATE, account),
   disable: (accountId: string) => ipcRenderer.invoke(IPC.ACCOUNTS_DISABLE, accountId),
+  delete: (accountId: string) => ipcRenderer.invoke(IPC.ACCOUNTS_DELETE, accountId),
 }
 
 // ─── Sync log bridge ─────────────────────────────────────────────────────────

@@ -34,8 +34,8 @@ interface PlaidItemRow {
   error_code: string | null
 }
 
-type AccountEntity = 'Personal' | 'Moonsmoke LLC' | 'Peak 10'
-type AccountBucket = 'Personal' | 'Moonsmoke LLC' | 'Peak 10'
+type AccountEntity = 'Personal' | 'Moonsmoke LLC' | 'Peak 10' | 'Watersound Investments LLC'
+type AccountBucket = 'Personal' | 'Moonsmoke LLC' | 'Peak 10' | 'Watersound Investments LLC' | ''
 
 // Access window.api (set by contextBridge in preload)
 declare const window: Window & {
@@ -62,6 +62,7 @@ declare const window: Window & {
       list: () => Promise<any>
       update: (a: any) => Promise<any>
       disable: (id: string) => Promise<any>
+      delete: (id: string) => Promise<any>
     }
   }
 }
@@ -126,7 +127,7 @@ function EditAccountModal({
   onClose: () => void
 }) {
   const [entity, setEntity] = useState<AccountEntity>(account.entity as AccountEntity)
-  const [bucket, setBucket] = useState<AccountBucket>(account.default_bucket as AccountBucket)
+  const [bucket, setBucket] = useState<AccountBucket>((account.default_bucket ?? '') as AccountBucket)
   const [notes, setNotes] = useState(account.notes || '')
   const [saving, setSaving] = useState(false)
 
@@ -156,6 +157,7 @@ function EditAccountModal({
               <option value="Personal">Personal</option>
               <option value="Moonsmoke LLC">Moonsmoke LLC</option>
               <option value="Peak 10">Peak 10</option>
+              <option value="Watersound Investments LLC">Watersound Investments LLC</option>
             </select>
           </div>
 
@@ -166,9 +168,11 @@ function EditAccountModal({
               onChange={(e) => setBucket(e.target.value as AccountBucket)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             >
+              <option value="">No default (follow rules)</option>
               <option value="Personal">Personal</option>
               <option value="Moonsmoke LLC">Moonsmoke LLC</option>
               <option value="Peak 10">Peak 10</option>
+              <option value="Watersound Investments LLC">Watersound Investments LLC</option>
             </select>
           </div>
 
@@ -314,6 +318,7 @@ function ConnectPlaidWizard({
                       <option value="Personal">Personal</option>
                       <option value="Moonsmoke LLC">Moonsmoke LLC</option>
                       <option value="Peak 10">Peak 10</option>
+                      <option value="Watersound Investments LLC">Watersound Investments LLC</option>
                     </select>
                   </div>
                   <div>
@@ -323,9 +328,11 @@ function ConnectPlaidWizard({
                       onChange={(e) => updateConfig(idx, 'default_bucket', e.target.value)}
                       className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs"
                     >
+                      <option value="">No default (follow rules)</option>
                       <option value="Personal">Personal</option>
                       <option value="Moonsmoke LLC">Moonsmoke LLC</option>
                       <option value="Peak 10">Peak 10</option>
+                      <option value="Watersound Investments LLC">Watersound Investments LLC</option>
                     </select>
                   </div>
                 </div>
@@ -439,6 +446,13 @@ export default function AccountManagement() {
   async function handleDisableAccount(account: AccountRow) {
     if (!confirm(`Disable "${account.account_name}"? Historical transactions will be kept.`)) return
     await window.api.accounts.disable(account.id)
+    load()
+  }
+
+  async function handleDeleteAccount(account: AccountRow) {
+    if (!confirm(`Permanently remove "${account.account_name}"? The account record will be deleted. Historical transactions are kept but will no longer be linked to an account.`)) return
+    await window.api.accounts.delete(account.id)
+    showToast(`${account.account_name} removed.`)
     load()
   }
 
@@ -627,6 +641,8 @@ export default function AccountManagement() {
                             ? 'bg-green-100 text-green-800'
                             : acct.entity === 'Peak 10'
                             ? 'bg-blue-100 text-blue-800'
+                            : acct.entity === 'Watersound Investments LLC'
+                            ? 'bg-purple-100 text-purple-800'
                             : 'bg-gray-100 text-gray-700'
                         }`}
                       >
@@ -654,9 +670,15 @@ export default function AccountManagement() {
                         </button>
                         <button
                           onClick={() => handleDisableAccount(acct)}
-                          className="text-xs text-gray-400 hover:text-red-500"
+                          className="text-xs text-gray-400 hover:text-orange-500"
                         >
                           Disable
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAccount(acct)}
+                          className="text-xs text-gray-400 hover:text-red-600"
+                        >
+                          Remove
                         </button>
                       </div>
                     </td>
