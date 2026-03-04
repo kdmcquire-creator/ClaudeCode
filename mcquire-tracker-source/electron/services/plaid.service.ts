@@ -12,6 +12,7 @@
 
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid'
 import { safeStorage, app } from 'electron'
+import { PLAID_REDIRECT_URI } from './plaid-link.service'
 import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
 import * as path from 'path'
@@ -150,7 +151,7 @@ export class PlaidService {
       // Link window and reloads the page with received_redirect_uri.
       // IMPORTANT: This URI must be registered in the Plaid dashboard under
       // Link → OAuth settings → Allowed redirect URIs.
-      redirect_uri: 'mcquire-tracker://plaid-oauth-callback',
+      redirect_uri: PLAID_REDIRECT_URI,
     })
     return response.data.link_token
   }
@@ -163,7 +164,7 @@ export class PlaidService {
       access_token: accessToken,
       country_codes: [CountryCode.Us],
       language: 'en',
-      redirect_uri: 'mcquire-tracker://plaid-oauth-callback',
+      redirect_uri: PLAID_REDIRECT_URI,
     })
     return response.data.link_token
   }

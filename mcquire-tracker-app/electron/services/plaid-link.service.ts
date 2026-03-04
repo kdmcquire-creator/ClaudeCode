@@ -3,17 +3,18 @@
 // Opens a child BrowserWindow that loads the local Plaid Link HTML page,
 // waits for the user to complete (or close) the flow, then resolves/rejects.
 //
-// OAUTH REDIRECT FLOW (used by Chase and other OAuth institutions):
-//   Plaid Link running in a file:// page cannot create a trusted popup, so
-//   it uses redirect mode — navigating the window directly to the bank's
-//   OAuth page. The flow requires a redirect_uri in the link token, which
-//   Plaid's server uses to send the oauth_state_id back after the user
-//   authenticates. We intercept that navigation via will-navigate and reload
-//   the Plaid Link page with received_redirect_uri so handler.open() can
-//   complete the connection.
+// OAUTH REDIRECT FLOW (Chase and other OAuth institutions):
+//   Plaid Link running in a file:// page uses redirect mode — it navigates
+//   this window directly to the bank's OAuth page. After authentication:
+//     bank → Plaid's server → http://localhost:4444/plaid-oauth-callback
+//   We intercept that navigation two ways (belt-and-suspenders):
+//   1. will-navigate: caught before the request leaves Electron, zero latency.
+//   2. Local HTTP server on port 4444: handles it if will-navigate races.
+//   Either path reloads the Plaid Link HTML with received_redirect_uri so
+//   handler.open() can complete the OAuth exchange with Plaid's server.
 //
-//   REQUIRED: Register 'mcquire-tracker://plaid-oauth-callback' as an allowed
-//   redirect URI in the Plaid developer dashboard (Link → OAuth settings).
+//   REQUIRED: In the Plaid developer dashboard → Team Settings → API →
+//   Allowed redirect URIs, add:  http://localhost:4444/plaid-oauth-callback
 //
 // DEPLOY:
 //   1. Copy this file → electron/services/plaid-link.service.ts
@@ -22,8 +23,13 @@
 //   4. Ensure resources/** is packed (already covered by package.json "files").
 
 import { BrowserWindow, ipcMain, app, session } from 'electron'
+import * as http from 'http'
 import path from 'path'
 import type { PlaidLinkResult } from '../../src/shared/plaid.types'
+
+const OAUTH_PORT = 4444
+const OAUTH_PATH = '/plaid-oauth-callback'
+export const PLAID_REDIRECT_URI = `http://localhost:${OAUTH_PORT}${OAUTH_PATH}`
 
 function getPreloadPath(): string {
   return path.join(app.getAppPath(), 'dist-electron', 'preload', 'plaid-link-preload.js')
@@ -108,23 +114,50 @@ export async function openPlaidLink(
       },
     }))
 
-    // ── OAuth redirect callback interception ──────────────────────────────────
-    // For OAuth institutions (Chase), Plaid uses redirect mode: it navigates
-    // THIS window to the bank, then after authentication the bank → Plaid's
-    // server → our redirect_uri (mcquire-tracker://plaid-oauth-callback?...).
-    // Intercept that final navigation before it fails, then reload the Plaid
-    // Link HTML with received_redirect_uri so handler.open() can finish.
+    // ── OAuth callback handler ─────────────────────────────────────────────────
+    // Called by whichever path wins (will-navigate or HTTP server).
+    // Reloads the Plaid Link HTML with received_redirect_uri so handler.open()
+    // can exchange the oauth_state_id and complete the connection.
+    function resumeWithCallback(callbackUrl: string): void {
+      if (win.isDestroyed()) return
+      const htmlPath = getHtmlPath()
+      win.loadURL(
+        `file://${htmlPath}` +
+        `?token=${encodeURIComponent(linkToken)}` +
+        `&received_redirect_uri=${encodeURIComponent(callbackUrl)}`
+      )
+    }
+
+    // ── Path 1: will-navigate (primary — zero latency) ────────────────────────
+    // Plaid's server redirects the window to our redirect_uri via HTTP 302.
+    // Intercept before Electron even starts a connection to localhost.
     win.webContents.on('will-navigate', (event, url) => {
-      if (url.startsWith('mcquire-tracker://plaid-oauth-callback')) {
+      if (url.startsWith(PLAID_REDIRECT_URI)) {
         event.preventDefault()
-        const htmlPath = getHtmlPath()
-        const resumeUrl =
-          `file://${htmlPath}` +
-          `?token=${encodeURIComponent(linkToken)}` +
-          `&received_redirect_uri=${encodeURIComponent(url)}`
-        win.loadURL(resumeUrl)
+        oauthServer.close()
+        resumeWithCallback(url)
       }
     })
+
+    // ── Path 2: local HTTP server (fallback) ──────────────────────────────────
+    // Catches the callback if will-navigate doesn't fire before the request
+    // reaches the network stack. Responds immediately so no error page shows.
+    const oauthServer = http.createServer((req, res) => {
+      const reqUrl = req.url ?? ''
+      if (reqUrl.startsWith(OAUTH_PATH)) {
+        const fullCallbackUrl = `${PLAID_REDIRECT_URI}${reqUrl.slice(OAUTH_PATH.length)}`
+        res.writeHead(200, { 'Content-Type': 'text/html' })
+        res.end('<!DOCTYPE html><html><body>Returning to McQuire Tracker\u2026</body></html>')
+        oauthServer.close()
+        resumeWithCallback(fullCallbackUrl)
+      } else {
+        res.writeHead(404)
+        res.end()
+      }
+    })
+    // Port conflict means will-navigate must be the only path — that's fine.
+    oauthServer.on('error', () => { /* port in use; will-navigate handles it */ })
+    oauthServer.listen(OAUTH_PORT)
 
     let settled = false
 
@@ -136,6 +169,7 @@ export async function openPlaidLink(
     }
 
     function cleanup() {
+      oauthServer.close()
       ipcMain.removeListener('plaid-link:success', onSuccess)
       ipcMain.removeListener('plaid-link:exit', onExit)
       ipcMain.removeListener('plaid-link:error', onError)
@@ -163,7 +197,6 @@ export async function openPlaidLink(
     })
 
     const htmlPath = getHtmlPath()
-    const pageUrl = `file://${htmlPath}?token=${encodeURIComponent(linkToken)}`
-    win.loadURL(pageUrl)
+    win.loadURL(`file://${htmlPath}?token=${encodeURIComponent(linkToken)}`)
   })
 }
