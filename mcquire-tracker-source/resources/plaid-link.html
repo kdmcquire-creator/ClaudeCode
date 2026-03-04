@@ -59,10 +59,6 @@
     (function () {
       var params = new URLSearchParams(window.location.search);
       var token = params.get('token');
-      // Set when returning from an OAuth redirect (Chase, etc.).
-      // plaid-link.service.ts intercepts the mcquire-tracker:// callback and
-      // reloads this page with the full callback URL as received_redirect_uri.
-      var receivedRedirectUri = params.get('received_redirect_uri');
 
       function showError(msg) {
         document.getElementById('status').innerHTML =
@@ -82,17 +78,8 @@
         return;
       }
 
-      if (receivedRedirectUri) {
-        // Returning from bank OAuth — update status message while Plaid
-        // exchanges the oauth_state_id in the background.
-        document.getElementById('status').innerHTML =
-          '<div class="spinner"></div>' +
-          '<h2>Finishing connection...</h2>' +
-          '<p>Verifying with your bank. Please wait.</p>';
-      }
-
       try {
-        var handlerConfig = {
+        var handler = window.Plaid.create({
           token: token,
 
           onSuccess: function (public_token, metadata) {
@@ -133,15 +120,7 @@
           onEvent: function (eventName, metadata) {
             console.log('[PlaidLink] Event:', eventName, metadata);
           },
-        };
-
-        // If returning from an OAuth redirect, pass received_redirect_uri so
-        // Plaid Link can exchange the oauth_state_id and complete the flow.
-        if (receivedRedirectUri) {
-          handlerConfig.receivedRedirectUri = receivedRedirectUri;
-        }
-
-        var handler = window.Plaid.create(handlerConfig);
+        });
 
         handler.open();
 

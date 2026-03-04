@@ -3,18 +3,14 @@
 // Opens a child BrowserWindow that loads the local Plaid Link HTML page,
 // waits for the user to complete (or close) the flow, then resolves/rejects.
 //
-// OAUTH REDIRECT FLOW (Chase and other OAuth institutions):
-//   Plaid Link running in a file:// page uses redirect mode — it navigates
-//   this window directly to the bank's OAuth page. After authentication:
-//     bank → Plaid's server → http://localhost:4444/plaid-oauth-callback
-//   We intercept that navigation two ways (belt-and-suspenders):
-//   1. will-navigate: caught before the request leaves Electron, zero latency.
-//   2. Local HTTP server on port 4444: handles it if will-navigate races.
-//   Either path reloads the Plaid Link HTML with received_redirect_uri so
-//   handler.open() can complete the OAuth exchange with Plaid's server.
-//
-//   REQUIRED: In the Plaid developer dashboard → Team Settings → API →
-//   Allowed redirect URIs, add:  http://localhost:4444/plaid-oauth-callback
+// OAUTH FLOW (Chase and other OAuth institutions):
+//   With the UA spoofed to Chrome 132, Plaid's SDK believes it's in a real
+//   browser and uses popup mode — window.open() for the bank's OAuth page.
+//   Our setWindowOpenHandler creates a BrowserWindow for the popup, which
+//   inherits the same session (Chrome 132 UA + fixed Client Hints), so Chase
+//   accepts it. After the user authenticates, Chase → Plaid's CDN callback
+//   page → postMessage back to the Plaid Link parent window → onSuccess.
+//   No redirect_uri needed.
 //
 // DEPLOY:
 //   1. Copy this file → electron/services/plaid-link.service.ts
@@ -23,13 +19,8 @@
 //   4. Ensure resources/** is packed (already covered by package.json "files").
 
 import { BrowserWindow, ipcMain, app, session } from 'electron'
-import * as http from 'http'
 import path from 'path'
 import type { PlaidLinkResult } from '../../src/shared/plaid.types'
-
-const OAUTH_PORT = 4444
-const OAUTH_PATH = '/plaid-oauth-callback'
-export const PLAID_REDIRECT_URI = `http://localhost:${OAUTH_PORT}${OAUTH_PATH}`
 
 function getPreloadPath(): string {
   return path.join(app.getAppPath(), 'dist-electron', 'preload', 'plaid-link-preload.js')
@@ -100,8 +91,9 @@ export async function openPlaidLink(
       },
     })
 
-    // Force any popup windows opened by Plaid into the same session so they
-    // also get the patched UA and Client Hints headers.
+    // Force any popup windows opened by Plaid (Chase OAuth page, Plaid's own
+    // CDN callback page, etc.) into the same session so they get the same
+    // patched UA and Client Hints headers.
     win.webContents.setWindowOpenHandler(() => ({
       action: 'allow',
       overrideBrowserWindowOptions: {
@@ -114,51 +106,6 @@ export async function openPlaidLink(
       },
     }))
 
-    // ── OAuth callback handler ─────────────────────────────────────────────────
-    // Called by whichever path wins (will-navigate or HTTP server).
-    // Reloads the Plaid Link HTML with received_redirect_uri so handler.open()
-    // can exchange the oauth_state_id and complete the connection.
-    function resumeWithCallback(callbackUrl: string): void {
-      if (win.isDestroyed()) return
-      const htmlPath = getHtmlPath()
-      win.loadURL(
-        `file://${htmlPath}` +
-        `?token=${encodeURIComponent(linkToken)}` +
-        `&received_redirect_uri=${encodeURIComponent(callbackUrl)}`
-      )
-    }
-
-    // ── Path 1: will-navigate (primary — zero latency) ────────────────────────
-    // Plaid's server redirects the window to our redirect_uri via HTTP 302.
-    // Intercept before Electron even starts a connection to localhost.
-    win.webContents.on('will-navigate', (event, url) => {
-      if (url.startsWith(PLAID_REDIRECT_URI)) {
-        event.preventDefault()
-        oauthServer.close()
-        resumeWithCallback(url)
-      }
-    })
-
-    // ── Path 2: local HTTP server (fallback) ──────────────────────────────────
-    // Catches the callback if will-navigate doesn't fire before the request
-    // reaches the network stack. Responds immediately so no error page shows.
-    const oauthServer = http.createServer((req, res) => {
-      const reqUrl = req.url ?? ''
-      if (reqUrl.startsWith(OAUTH_PATH)) {
-        const fullCallbackUrl = `${PLAID_REDIRECT_URI}${reqUrl.slice(OAUTH_PATH.length)}`
-        res.writeHead(200, { 'Content-Type': 'text/html' })
-        res.end('<!DOCTYPE html><html><body>Returning to McQuire Tracker\u2026</body></html>')
-        oauthServer.close()
-        resumeWithCallback(fullCallbackUrl)
-      } else {
-        res.writeHead(404)
-        res.end()
-      }
-    })
-    // Port conflict means will-navigate must be the only path — that's fine.
-    oauthServer.on('error', () => { /* port in use; will-navigate handles it */ })
-    oauthServer.listen(OAUTH_PORT)
-
     let settled = false
 
     function settle(fn: () => void) {
@@ -169,7 +116,6 @@ export async function openPlaidLink(
     }
 
     function cleanup() {
-      oauthServer.close()
       ipcMain.removeListener('plaid-link:success', onSuccess)
       ipcMain.removeListener('plaid-link:exit', onExit)
       ipcMain.removeListener('plaid-link:error', onError)
