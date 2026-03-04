@@ -144,7 +144,6 @@ export class PlaidService {
       products: [Products.Transactions],
       country_codes: [CountryCode.Us],
       language: 'en',
-      redirect_uri: 'mcquire-tracker://plaid-oauth-callback',
     })
     return response.data.link_token
   }
@@ -157,7 +156,6 @@ export class PlaidService {
       access_token: accessToken,
       country_codes: [CountryCode.Us],
       language: 'en',
-      redirect_uri: 'mcquire-tracker://plaid-oauth-callback',
     })
     return response.data.link_token
   }
