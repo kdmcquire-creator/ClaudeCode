@@ -785,34 +785,42 @@ function registerAppIpcHandlers(): void {
 
   ipcMain.handle('rules:save', (_event, rule: Record<string, any>) => {
     if (!db) return { success: false, error: 'DB not initialized' }
-    const { v4: uuidv4 } = require('uuid')
-    const id = rule.id || uuidv4()
-    db.prepare(`
-      INSERT INTO rules
-        (id, rule_name, section, match_type, match_value, account_mask_filter,
-         amount_min, amount_max, day_of_week_filter, date_from_filter, date_to_filter,
-         bucket, p10_category, llc_category, description_notes, flag_reason, action,
-         priority_order, is_active, notes, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
-      ON CONFLICT(id) DO UPDATE SET
-        rule_name=excluded.rule_name, section=excluded.section, match_type=excluded.match_type,
-        match_value=excluded.match_value, account_mask_filter=excluded.account_mask_filter,
-        amount_min=excluded.amount_min, amount_max=excluded.amount_max,
-        day_of_week_filter=excluded.day_of_week_filter, date_from_filter=excluded.date_from_filter,
-        date_to_filter=excluded.date_to_filter, bucket=excluded.bucket,
-        p10_category=excluded.p10_category, llc_category=excluded.llc_category,
-        description_notes=excluded.description_notes, flag_reason=excluded.flag_reason,
-        action=excluded.action, priority_order=excluded.priority_order,
-        is_active=excluded.is_active, notes=excluded.notes, updated_at=datetime('now')
-    `).run(
-      id, rule.rule_name, rule.section, rule.match_type, rule.match_value,
-      rule.account_mask_filter ?? null, rule.amount_min ?? null, rule.amount_max ?? null,
-      rule.day_of_week_filter ?? null, rule.date_from_filter ?? null, rule.date_to_filter ?? null,
-      rule.bucket, rule.p10_category ?? null, rule.llc_category ?? null,
-      rule.description_notes ?? null, rule.flag_reason ?? null, rule.action,
-      rule.priority_order, rule.is_active ?? 1, rule.notes ?? null
-    )
-    return { success: true, data: id }
+    try {
+      const { v4: uuidv4 } = require('uuid')
+      const id = rule.id || uuidv4()
+      db.prepare(`
+        INSERT INTO rules
+          (id, rule_name, section, match_type, match_value, account_mask_filter,
+           amount_min, amount_max, day_of_week_filter, date_from_filter, date_to_filter,
+           bucket, p10_category, llc_category, description_notes, flag_reason, action,
+           priority_order, is_active, notes, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+        ON CONFLICT(id) DO UPDATE SET
+          rule_name=excluded.rule_name, section=excluded.section, match_type=excluded.match_type,
+          match_value=excluded.match_value, account_mask_filter=excluded.account_mask_filter,
+          amount_min=excluded.amount_min, amount_max=excluded.amount_max,
+          day_of_week_filter=excluded.day_of_week_filter, date_from_filter=excluded.date_from_filter,
+          date_to_filter=excluded.date_to_filter, bucket=excluded.bucket,
+          p10_category=excluded.p10_category, llc_category=excluded.llc_category,
+          description_notes=excluded.description_notes, flag_reason=excluded.flag_reason,
+          action=excluded.action, priority_order=excluded.priority_order,
+          is_active=excluded.is_active, notes=excluded.notes, updated_at=datetime('now')
+      `).run(
+        id, rule.rule_name, rule.section, rule.match_type, rule.match_value,
+        rule.account_mask_filter ?? null, rule.amount_min ?? null, rule.amount_max ?? null,
+        rule.day_of_week_filter ?? null, rule.date_from_filter ?? null, rule.date_to_filter ?? null,
+        rule.bucket, rule.p10_category ?? null, rule.llc_category ?? null,
+        rule.description_notes ?? null, rule.flag_reason ?? null, rule.action,
+        rule.priority_order, rule.is_active ?? 1, rule.notes ?? null
+      )
+      // Immediately apply the new/updated rule to all pending_review transactions
+      const { resolved } = reclassifyPendingAfterRuleChange(db)
+      console.log(`[rules:save] rule saved (${id}), reclassify resolved ${resolved} pending txs`)
+      return { success: true, data: id }
+    } catch (err: any) {
+      console.error('[rules:save] failed:', err)
+      return { success: false, error: err.message }
+    }
   })
 
   ipcMain.handle('rules:delete', (_event, id: string) => {

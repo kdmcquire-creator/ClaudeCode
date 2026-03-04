@@ -114,7 +114,11 @@ export default function ReviewQueue({ onPendingChange }: Props) {
           priority_order: 850,
           is_active: 1,
         }
-        await window.api.rules.save(rule).catch(() => {})
+        const ruleResult = await window.api.rules.save(rule)
+        if (ruleResult?.success === false) {
+          console.error('Rule save failed:', ruleResult.error)
+          alert('Warning: classification was saved but the rule could not be created: ' + (ruleResult.error ?? 'unknown error'))
+        }
       }
 
       setTransactions(prev => prev.filter(t => t.id !== tx.id))
