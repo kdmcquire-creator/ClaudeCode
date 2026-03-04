@@ -3,24 +3,43 @@
 // Opens a child BrowserWindow that loads the local Plaid Link HTML page,
 // waits for the user to complete (or close) the flow, then resolves/rejects.
 //
-// OAUTH FLOW (Chase and other OAuth institutions):
-//   With the UA spoofed to Chrome 132, Plaid's SDK believes it's in a real
-//   browser and uses popup mode — window.open() for the bank's OAuth page.
-//   Our setWindowOpenHandler creates a BrowserWindow for the popup, which
-//   inherits the same session (Chrome 132 UA + fixed Client Hints), so Chase
-//   accepts it. After the user authenticates, Chase → Plaid's CDN callback
-//   page → postMessage back to the Plaid Link parent window → onSuccess.
-//   No redirect_uri needed.
-//
-// DEPLOY:
-//   1. Copy this file → electron/services/plaid-link.service.ts
-//   2. Copy plaid-link-preload.ts → electron/preload/plaid-link-preload.ts
-//   3. Copy plaid-link.html → resources/plaid-link.html
-//   4. Ensure resources/** is packed (already covered by package.json "files").
+// WHY CDP + session UA:
+//   session.setUserAgent() patches the User-Agent HTTP header and
+//   navigator.userAgent, but NOT navigator.userAgentData (structured UA
+//   Client Hints). Plaid's SDK checks navigator.userAgentData.brands and
+//   sees "Electron" → shows "System Requirements not met".
+//   Emulation.setUserAgentOverride via Chrome DevTools Protocol overwrites
+//   BOTH navigator.userAgent AND navigator.userAgentData in the JS runtime,
+//   making Plaid see "Google Chrome 132" everywhere it looks.
+//   We apply the override to the Plaid Link window AND to any popup window
+//   it opens (Chase OAuth page) via did-create-window.
 
 import { BrowserWindow, ipcMain, app, session } from 'electron'
 import path from 'path'
 import type { PlaidLinkResult } from '../../src/shared/plaid.types'
+
+const CHROME_VER = '132'
+const CHROME_FULL = '132.0.6834.83'
+
+const UA_METADATA = {
+  brands: [
+    { brand: 'Not A Brand', version: '8' },
+    { brand: 'Chromium', version: CHROME_VER },
+    { brand: 'Google Chrome', version: CHROME_VER },
+  ],
+  fullVersionList: [
+    { brand: 'Not A Brand', version: '8.0.0.0' },
+    { brand: 'Chromium', version: CHROME_FULL },
+    { brand: 'Google Chrome', version: CHROME_FULL },
+  ],
+  platform: 'Windows',
+  platformVersion: '10.0.0',
+  architecture: 'x86',
+  model: '',
+  mobile: false,
+  bitness: '64',
+  wow64: false,
+}
 
 function getPreloadPath(): string {
   return path.join(app.getAppPath(), 'dist-electron', 'preload', 'plaid-link-preload.js')
@@ -30,38 +49,43 @@ function getHtmlPath(): string {
   return path.join(app.getAppPath(), 'resources', 'plaid-link.html')
 }
 
+/** Apply CDP user-agent override to a webContents so navigator.userAgentData shows Chrome. */
+async function applyCdpUaOverride(webContents: Electron.WebContents, cleanUA: string): Promise<void> {
+  try {
+    webContents.debugger.attach('1.3')
+  } catch {
+    // Already attached — fine, continue
+  }
+  try {
+    await webContents.debugger.sendCommand('Emulation.setUserAgentOverride', {
+      userAgent: cleanUA,
+      acceptLanguage: 'en-US,en;q=0.9',
+      platform: 'Win32',
+      userAgentMetadata: UA_METADATA,
+    })
+  } catch (e) {
+    console.warn('[PlaidLink] CDP UA override failed:', e)
+  }
+}
+
 export async function openPlaidLink(
   linkToken: string,
   institutionNameHint?: string
 ): Promise<PlaidLinkResult> {
   return new Promise<PlaidLinkResult>((resolve, reject) => {
-    // ── Dedicated session — clean user agent + fixed Client Hints ─────────────
-    // Each call gets a fresh in-memory session (no stale OAuth state from a
-    // previous failed attempt).
-    //
-    // Chase requires Chrome 130+. Electron 28 ships with Chromium 120.
-    // We bump the version to 132 and present as a standard Chrome release.
-    // This affects:
-    //   • User-Agent HTTP header           (session.setUserAgent)
-    //   • navigator.userAgent in JS        (session.setUserAgent)
-    //   • Sec-CH-UA / Sec-CH-UA-Full-Version-List (webRequest hook below)
-    //
-    // Setting everything on the SESSION means it applies before any navigation
-    // starts — covering both this window and any OAuth popup windows that share
-    // the session (via setWindowOpenHandler below).
+    // ── Dedicated in-memory session ───────────────────────────────────────────
     const partitionKey = `plaid-link-${Date.now()}`
     const plaidSession = session.fromPartition(partitionKey, { cache: false })
 
-    const CHROME_VER = '132'
-    const CHROME_FULL = '132.0.6834.83'
-    const cleanUA = plaidSession
-      .getUserAgent()
+    // Patch the UA string (HTTP header + navigator.userAgent)
+    const rawUA = plaidSession.getUserAgent()
+    const cleanUA = rawUA
       .replace(/\s*Electron\/[\d.]+/, '')
       .replace(/Chrome\/[\d.]+/, `Chrome/${CHROME_FULL}`)
+
     plaidSession.setUserAgent(cleanUA)
 
-    // Sec-CH-UA Client Hints: Electron omits "Google Chrome" from the brand
-    // list. Patch all relevant headers for every request in this session.
+    // Patch Sec-CH-UA HTTP headers for every request in this session
     plaidSession.webRequest.onBeforeSendHeaders((details, callback) => {
       const headers = { ...details.requestHeaders }
       for (const key of Object.keys(headers)) {
@@ -85,15 +109,16 @@ export async function openPlaidLink(
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        sandbox: false, // required so the preload can use ipcRenderer
+        sandbox: false,
         preload: getPreloadPath(),
         partition: partitionKey,
       },
     })
 
-    // Force any popup windows opened by Plaid (Chase OAuth page, Plaid's own
-    // CDN callback page, etc.) into the same session so they get the same
-    // patched UA and Client Hints headers.
+    // Apply CDP UA override so navigator.userAgentData shows Google Chrome
+    applyCdpUaOverride(win.webContents, cleanUA)
+
+    // When Plaid opens a popup (e.g. Chase OAuth), patch that window too
     win.webContents.setWindowOpenHandler(() => ({
       action: 'allow',
       overrideBrowserWindowOptions: {
@@ -106,6 +131,11 @@ export async function openPlaidLink(
       },
     }))
 
+    win.webContents.on('did-create-window', (childWin) => {
+      applyCdpUaOverride(childWin.webContents, cleanUA)
+    })
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
     let settled = false
 
     function settle(fn: () => void) {
