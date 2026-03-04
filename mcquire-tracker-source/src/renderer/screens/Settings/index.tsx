@@ -225,14 +225,20 @@ function AccountsTab() {
 
   const handleUpdate = async () => {
     if (!editingAccount) return
-    try {
-      await window.api.accounts.update({ id: editingAccount.id, entity: editEntity, default_bucket: editBucket })
-      showMsg("Account updated.", "success")
-    } catch (e: any) {
-      showMsg("Update failed: " + (e?.message ?? "unknown"), "error")
+    const result = await window.api.accounts.update({
+      id: editingAccount.id,
+      account_name: editingAccount.account_name,
+      entity: editEntity,
+      default_bucket: editBucket,
+      notes: editingAccount.notes ?? null,
+    })
+    if (result?.success === false) {
+      showMsg("Update failed: " + (result.error ?? "unknown"), "error")
+    } else {
+      showMsg(`${editingAccount.account_name} updated.`, "success")
+      setEditingAccount(null)
+      load()
     }
-    setEditingAccount(null)
-    load()
   }
 
   if (loading) return <div className="text-slate-500">Loading accounts...</div>

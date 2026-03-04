@@ -133,7 +133,7 @@ function EditAccountModal({
 
   async function handleSave() {
     setSaving(true)
-    await onSave({ id: account.id, entity, default_bucket: bucket, notes })
+    await onSave({ id: account.id, account_name: account.account_name, entity, default_bucket: bucket, notes })
     setSaving(false)
     onClose()
   }

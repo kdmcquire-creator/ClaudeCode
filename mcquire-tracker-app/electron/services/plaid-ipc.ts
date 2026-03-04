@@ -165,7 +165,7 @@ export function registerPlaidIpcHandlers(
       db.prepare(
         `UPDATE accounts SET
            account_name = ?, entity = ?, default_bucket = ?,
-           notes = ?, updated_at = datetime('now')
+           notes = ?
          WHERE id = ?`
       ).run(account.account_name, account.entity, account.default_bucket, account.notes, account.id)
       return { success: true }
