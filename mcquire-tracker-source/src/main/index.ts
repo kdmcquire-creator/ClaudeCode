@@ -276,6 +276,23 @@ function runMigrations(database: Database.Database): void {
       .run()
     database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('001-conditional-restaurant-fix')
   }
+
+  // Migration 002: fix CSV-imported transaction amounts
+  // Monarch, USAA, and Apple Card CSVs use negative for expenses (bank-statement convention).
+  // Our import stored them as-is, so all CSV expenses are negative. Negate to match Plaid convention.
+  // Identified by: source_row_hash IS NOT NULL (CSV) AND plaid_transaction_id IS NULL (not Plaid).
+  if (!applied('002-csv-amount-sign-fix')) {
+    const result = database
+      .prepare(`
+        UPDATE transactions
+        SET amount = -amount, updated_at = datetime('now')
+        WHERE source_row_hash IS NOT NULL
+          AND plaid_transaction_id IS NULL
+      `)
+      .run()
+    console.log(`[Migration 002] Flipped signs on ${result.changes} CSV-imported transactions`)
+    database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('002-csv-amount-sign-fix')
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

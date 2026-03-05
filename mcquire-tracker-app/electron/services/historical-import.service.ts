@@ -390,9 +390,12 @@ export class HistoricalImportService {
   }
 
   private parseAmount(raw: string): number {
-    // Monarch exports amounts as positive for debits and negative for credits
+    // Monarch, USAA, and Apple Card CSVs all use bank-statement sign convention:
+    // expenses (debits) are NEGATIVE, income/credits are POSITIVE.
+    // Our convention (matching Plaid): positive = expense, negative = income/credit.
+    // Negate to convert.
     const cleaned = raw.replace(/[$,\s]/g, '')
-    return parseFloat(cleaned) || 0
+    return -(parseFloat(cleaned) || 0)
   }
 
   private normalizeDate(raw: string): string {

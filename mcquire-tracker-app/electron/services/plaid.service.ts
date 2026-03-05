@@ -310,10 +310,11 @@ export class PlaidService {
           this.updatePlaidTransaction(tx)
         }
 
-        // Process removed
+        // Process removed — pending transactions that reconciled to a posted version
+        // Must also set review_status so they leave the Review Queue
         for (const removed_tx of removed) {
           this.db
-            .prepare("UPDATE transactions SET bucket = 'Exclude' WHERE plaid_transaction_id = ?")
+            .prepare("UPDATE transactions SET bucket = 'Exclude', review_status = 'auto_classified', updated_at = datetime('now') WHERE plaid_transaction_id = ?")
             .run(removed_tx.transaction_id)
         }
       }
