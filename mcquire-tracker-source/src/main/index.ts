@@ -293,6 +293,51 @@ function runMigrations(database: Database.Database): void {
     console.log(`[Migration 002] Flipped signs on ${result.changes} CSV-imported transactions`)
     database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('002-csv-amount-sign-fix')
   }
+
+  // Migration 003: deduplicate CSV vs Plaid overlap
+  // When Plaid's first sync covers the same date range as the historical CSV import, the same
+  // real transaction ends up in the DB twice — once with source_row_hash (CSV) and once with
+  // plaid_transaction_id (Plaid). They look like different transactions because Plaid enriches
+  // merchant names and may use a different date (transaction vs posting). Dates can be up to
+  // 5 days apart due to posting lag.
+  //
+  // Strategy: for a CSV record, if there is EXACTLY ONE Plaid record on the same account with
+  // the same amount and a date within 5 days, the CSV copy is the stale one. Mark it
+  // Exclude + auto_classified so it leaves the queue. The Plaid version stays active.
+  // The "exactly one" guard prevents false merges on repeated same-amount purchases.
+  if (!applied('003-csv-plaid-dedup')) {
+    const csvDuplicates = database.prepare(`
+      SELECT c.id
+      FROM transactions c
+      WHERE c.source_row_hash IS NOT NULL
+        AND c.plaid_transaction_id IS NULL
+        AND c.review_status != 'manually_classified'
+        AND (
+          SELECT COUNT(*)
+          FROM transactions p
+          WHERE p.plaid_transaction_id IS NOT NULL
+            AND p.source_row_hash IS NULL
+            AND p.account_id = c.account_id
+            AND p.amount = c.amount
+            AND ABS(julianday(p.transaction_date) - julianday(c.transaction_date)) <= 5
+        ) = 1
+    `).all() as Array<{ id: string }>
+
+    if (csvDuplicates.length > 0) {
+      const exclude = database.prepare(`
+        UPDATE transactions
+        SET bucket = 'Exclude', review_status = 'auto_classified', updated_at = datetime('now')
+        WHERE id = ?
+      `)
+      const run = database.transaction(() => {
+        for (const row of csvDuplicates) exclude.run(row.id)
+      })
+      run()
+      console.log(`[Migration 003] Excluded ${csvDuplicates.length} CSV records superseded by Plaid`)
+    }
+
+    database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('003-csv-plaid-dedup')
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
