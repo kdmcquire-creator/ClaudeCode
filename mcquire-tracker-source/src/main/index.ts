@@ -294,30 +294,31 @@ function runMigrations(database: Database.Database): void {
     database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('002-csv-amount-sign-fix')
   }
 
-  // Migration 003: deduplicate CSV vs Plaid overlap
-  // When Plaid's first sync covers the same date range as the historical CSV import, the same
-  // real transaction ends up in the DB twice — once with source_row_hash (CSV) and once with
-  // plaid_transaction_id (Plaid). They look like different transactions because Plaid enriches
-  // merchant names and may use a different date (transaction vs posting). Dates can be up to
-  // 5 days apart due to posting lag.
-  //
-  // Strategy: for a CSV record, if there is EXACTLY ONE Plaid record on the same account with
-  // the same amount and a date within 5 days, the CSV copy is the stale one. Mark it
-  // Exclude + auto_classified so it leaves the queue. The Plaid version stays active.
-  // The "exactly one" guard prevents false merges on repeated same-amount purchases.
+  // Migration 003: deduplicate CSV vs Plaid overlap (superseded by 004 — account_id was wrong)
   if (!applied('003-csv-plaid-dedup')) {
+    database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('003-csv-plaid-dedup')
+  }
+
+  // Migration 004: deduplicate CSV vs Plaid overlap, matching on account_mask
+  // Migration 003 matched on account_id, but CSV imports and Plaid create separate account
+  // records for the same physical card (different UUIDs, same mask e.g. '5829'). Matching on
+  // account_mask via a join correctly identifies duplicates across those two account records.
+  // Same "exactly one Plaid match" guard to avoid merging repeated same-amount purchases.
+  if (!applied('004-csv-plaid-dedup-by-mask')) {
     const csvDuplicates = database.prepare(`
       SELECT c.id
       FROM transactions c
+      JOIN accounts ca ON ca.id = c.account_id
       WHERE c.source_row_hash IS NOT NULL
         AND c.plaid_transaction_id IS NULL
         AND c.review_status != 'manually_classified'
         AND (
           SELECT COUNT(*)
           FROM transactions p
+          JOIN accounts pa ON pa.id = p.account_id
           WHERE p.plaid_transaction_id IS NOT NULL
             AND p.source_row_hash IS NULL
-            AND p.account_id = c.account_id
+            AND pa.account_mask = ca.account_mask
             AND p.amount = c.amount
             AND ABS(julianday(p.transaction_date) - julianday(c.transaction_date)) <= 5
         ) = 1
@@ -333,10 +334,10 @@ function runMigrations(database: Database.Database): void {
         for (const row of csvDuplicates) exclude.run(row.id)
       })
       run()
-      console.log(`[Migration 003] Excluded ${csvDuplicates.length} CSV records superseded by Plaid`)
+      console.log(`[Migration 004] Excluded ${csvDuplicates.length} CSV records superseded by Plaid`)
     }
 
-    database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('003-csv-plaid-dedup')
+    database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('004-csv-plaid-dedup-by-mask')
   }
 }
 
