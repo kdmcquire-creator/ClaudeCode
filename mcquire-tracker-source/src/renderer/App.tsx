@@ -175,6 +175,13 @@ declare global {
         getAll: () => Promise<any>
         set: (key: string, value: string) => Promise<any>
       }
+      claude: {
+        hasKey: () => Promise<any>
+        saveKey: (apiKey: string) => Promise<any>
+        deleteKey: () => Promise<any>
+        suggest: (tx: any) => Promise<any>
+        suggestBatch: (transactions: any[]) => Promise<any>
+      }
     }
   }
 }

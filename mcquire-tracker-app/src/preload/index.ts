@@ -86,6 +86,15 @@ contextBridge.exposeInMainWorld('api', {
     set:       (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value),
   },
 
+  // ── Claude AI Classification ─────────────────────────────────────────────
+  claude: {
+    hasKey:       ()                    => ipcRenderer.invoke('claude:has-key'),
+    saveKey:      (apiKey: string)      => ipcRenderer.invoke('claude:save-key', apiKey),
+    deleteKey:    ()                    => ipcRenderer.invoke('claude:delete-key'),
+    suggest:      (tx: any)             => ipcRenderer.invoke('claude:suggest', tx),
+    suggestBatch: (transactions: any[]) => ipcRenderer.invoke('claude:suggest-batch', transactions),
+  },
+
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

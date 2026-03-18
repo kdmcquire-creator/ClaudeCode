@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react"
 
-type Tab = "accounts" | "rules" | "sync" | "notifications" | "trips"
+type Tab = "accounts" | "rules" | "sync" | "notifications" | "trips" | "ai"
 
 const RULE_SECTIONS = ["exclusion", "llc_always", "p10_always", "p10_conditional", "personal_override", "special", "ask_kyle"]
 const RULE_ACTIONS = ["classify", "ask_kyle", "exclude", "split_flag"]
@@ -34,10 +34,10 @@ export default function Settings() {
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-slate-800 mb-5">Settings</h1>
       <div className="flex border-b border-slate-200 mb-6 gap-1">
-        {(["accounts", "rules", "trips", "sync", "notifications"] as Tab[]).map(t => (
+        {(["accounts", "rules", "trips", "sync", "notifications", "ai"] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${tab === t ? "bg-white border border-b-white border-slate-200 text-blue-600 -mb-px" : "text-slate-500 hover:text-slate-700"}`}>
-            {t === "accounts" ? "Account Management" : t === "rules" ? "Rule Editor" : t === "trips" ? "Personal Trips" : t === "sync" ? "Sync & Schedule" : "Notifications"}
+            {t === "accounts" ? "Account Management" : t === "rules" ? "Rule Editor" : t === "trips" ? "Personal Trips" : t === "sync" ? "Sync & Schedule" : t === "ai" ? "AI Classification" : "Notifications"}
           </button>
         ))}
       </div>
@@ -46,6 +46,7 @@ export default function Settings() {
       {tab === "trips" && <TripsTab />}
       {tab === "sync" && <SyncTab />}
       {tab === "notifications" && <NotificationsTab />}
+      {tab === "ai" && <AiClassificationTab />}
     </div>
   )
 }
@@ -859,6 +860,128 @@ function NotificationsTab() {
       <div className="flex gap-3">
         <button onClick={save} disabled={saving} className="flex-1 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900 disabled:opacity-50">{saving ? "Saving..." : "Save Settings"}</button>
         <button onClick={sendTest} disabled={testing} className="px-5 py-2.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 disabled:opacity-50">{testing ? "Sending..." : "Send Test Email"}</button>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Classification Tab — Claude API key management
+// ─────────────────────────────────────────────────────────────────────────────
+function AiClassificationTab() {
+  const [hasKey, setHasKey] = useState(false)
+  const [apiKey, setApiKey] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    window.api.claude?.hasKey?.().then((res: any) => {
+      setHasKey(res?.data === true)
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  const saveKey = async () => {
+    if (!apiKey.trim()) return
+    setSaving(true)
+    setStatus(null)
+    try {
+      const res = await window.api.claude.saveKey(apiKey.trim())
+      if (res?.success) {
+        setHasKey(true)
+        setApiKey("")
+        setStatus("API key saved successfully. AI suggestions are now enabled in the Review Queue.")
+      } else {
+        setStatus("Failed to save: " + (res?.error ?? "unknown error"))
+      }
+    } catch (e: any) {
+      setStatus("Error: " + (e?.message ?? "unknown"))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeKey = async () => {
+    if (!confirm("Remove Claude API key? AI suggestions will be disabled.")) return
+    await window.api.claude.deleteKey()
+    setHasKey(false)
+    setStatus("API key removed. AI suggestions are disabled.")
+  }
+
+  if (loading) return <div className="text-sm text-slate-500">Loading...</div>
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-800 mb-1">AI-Powered Classification</h2>
+        <p className="text-sm text-slate-500">
+          Uses Claude (Haiku) to suggest bucket and category for unclassified transactions.
+          Suggestions appear in the Review Queue with a one-click apply button.
+        </p>
+      </div>
+
+      <div className={`rounded-lg p-4 border ${hasKey ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'}`}>
+        <div className="flex items-center gap-2 mb-2">
+          <div className={`w-2 h-2 rounded-full ${hasKey ? 'bg-green-500' : 'bg-slate-400'}`} />
+          <span className="text-sm font-medium text-slate-700">
+            {hasKey ? "Claude API key configured" : "No API key configured"}
+          </span>
+        </div>
+        <p className="text-xs text-slate-500">
+          {hasKey
+            ? "AI suggestions are active. Your key is stored encrypted via Windows Credential Manager."
+            : "Add your Anthropic API key to enable AI classification suggestions."}
+        </p>
+      </div>
+
+      {!hasKey && (
+        <div className="space-y-3">
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block">Anthropic API Key</label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            placeholder="sk-ant-api03-..."
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono"
+          />
+          <p className="text-xs text-slate-400">
+            Get your API key from console.anthropic.com. Uses Claude Haiku — costs ~$0.001 per suggestion.
+          </p>
+          <button
+            onClick={saveKey}
+            disabled={saving || !apiKey.trim()}
+            className="px-5 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save API Key"}
+          </button>
+        </div>
+      )}
+
+      {hasKey && (
+        <button
+          onClick={removeKey}
+          className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50"
+        >
+          Remove API Key
+        </button>
+      )}
+
+      {status && (
+        <div className={`text-sm p-3 rounded-lg ${status.includes('Error') || status.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+          {status}
+        </div>
+      )}
+
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-slate-700 mb-2">How it works</h3>
+        <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
+          <li>When you expand a transaction in the Review Queue, click "Ask AI for suggestion"</li>
+          <li>Or use "AI Suggest (10)" to get suggestions for the first 10 visible transactions</li>
+          <li>Claude analyzes the merchant, amount, date, and your recent classification history</li>
+          <li>Click "Apply" to pre-fill the bucket and category, then confirm as usual</li>
+          <li>High-confidence suggestions ({">"}70%) are highlighted in purple; lower ones in amber</li>
+          <li>Creating a rule after accepting a suggestion prevents future AI calls for that merchant</li>
+        </ul>
       </div>
     </div>
   )

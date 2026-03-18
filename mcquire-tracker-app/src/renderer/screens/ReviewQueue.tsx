@@ -48,6 +48,10 @@ export default function ReviewQueue({ onPendingChange }: Props) {
   const [attAmt, setAttAmt] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<Record<string, boolean>>({})
   const [filterStatus, setFilterStatus] = useState<"all" | "pending_review" | "flagged">("all")
+  const [aiSuggestions, setAiSuggestions] = useState<Record<string, any>>({})
+  const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({})
+  const [aiEnabled, setAiEnabled] = useState(false)
+  const [aiBatchLoading, setAiBatchLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -65,6 +69,68 @@ export default function ReviewQueue({ onPendingChange }: Props) {
   }, [onPendingChange])
 
   useEffect(() => { load() }, [load])
+
+  // Check if Claude API key is configured
+  useEffect(() => {
+    window.api.claude?.hasKey?.().then((res: any) => {
+      setAiEnabled(res?.data === true)
+    }).catch(() => {})
+  }, [])
+
+  const handleAiSuggest = async (tx: any) => {
+    setAiLoading(prev => ({ ...prev, [tx.id]: true }))
+    try {
+      const res = await window.api.claude.suggest({
+        description_raw: tx.description_raw,
+        merchant_name: tx.merchant_name,
+        amount: tx.amount,
+        transaction_date: tx.transaction_date,
+        account_mask: tx.account_mask,
+        category_source: tx.category_source,
+        flag_reason: tx.flag_reason,
+      })
+      if (res?.success && res.data) {
+        setAiSuggestions(prev => ({ ...prev, [tx.id]: res.data }))
+      }
+    } catch (e: any) {
+      console.error('AI suggestion failed:', e)
+    } finally {
+      setAiLoading(prev => ({ ...prev, [tx.id]: false }))
+    }
+  }
+
+  const handleAiSuggestAll = async () => {
+    setAiBatchLoading(true)
+    try {
+      const txBatch = visible.slice(0, 10).map(tx => ({
+        id: tx.id,
+        description_raw: tx.description_raw,
+        merchant_name: tx.merchant_name,
+        amount: tx.amount,
+        transaction_date: tx.transaction_date,
+        account_mask: tx.account_mask,
+        category_source: tx.category_source,
+        flag_reason: tx.flag_reason,
+      }))
+      const res = await window.api.claude.suggestBatch(txBatch)
+      if (res?.success && res.data) {
+        setAiSuggestions(prev => ({ ...prev, ...res.data }))
+      }
+    } catch (e: any) {
+      console.error('Batch AI suggestion failed:', e)
+    } finally {
+      setAiBatchLoading(false)
+    }
+  }
+
+  const applyAiSuggestion = (txId: string) => {
+    const suggestion = aiSuggestions[txId]
+    if (!suggestion) return
+    setCs(txId, {
+      bucket: suggestion.bucket,
+      category: suggestion.p10_category ?? suggestion.llc_category ?? "",
+    })
+  }
 
   const visible = transactions.filter(t =>
     filterStatus === "all" ? true : t.review_status === filterStatus
@@ -276,6 +342,15 @@ export default function ReviewQueue({ onPendingChange }: Props) {
             <option value="pending_review">Pending ({transactions.filter(t => t.review_status === "pending_review").length})</option>
             <option value="flagged">Flagged ({transactions.filter(t => t.review_status === "flagged").length})</option>
           </select>
+          {aiEnabled && visible.length > 0 && (
+            <button
+              onClick={handleAiSuggestAll}
+              disabled={aiBatchLoading}
+              className="px-3 py-2 bg-violet-600 text-white text-sm rounded-lg hover:bg-violet-700 disabled:opacity-50"
+            >
+              {aiBatchLoading ? "Thinking..." : "AI Suggest (10)"}
+            </button>
+          )}
           <button onClick={load} className="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
             Refresh
           </button>
@@ -357,6 +432,48 @@ export default function ReviewQueue({ onPendingChange }: Props) {
                   {tx.flag_reason && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
                       <strong>⚠️ Action needed:</strong> {tx.flag_reason}
+                    </div>
+                  )}
+
+                  {/* AI Classification Suggestion */}
+                  {aiEnabled && (
+                    <div className="space-y-2">
+                      {aiSuggestions[tx.id] ? (
+                        <div className={`rounded-lg p-3 text-sm border ${aiSuggestions[tx.id].confidence >= 0.7 ? 'bg-violet-50 border-violet-200' : 'bg-amber-50 border-amber-200'}`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="font-medium text-violet-800">AI Suggestion:</span>
+                              <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${bucketColor[aiSuggestions[tx.id].bucket] ?? 'bg-gray-100'}`}>
+                                {aiSuggestions[tx.id].bucket}
+                              </span>
+                              {aiSuggestions[tx.id].p10_category && (
+                                <span className="ml-1 text-xs text-slate-500">({aiSuggestions[tx.id].p10_category})</span>
+                              )}
+                              {aiSuggestions[tx.id].llc_category && (
+                                <span className="ml-1 text-xs text-slate-500">({aiSuggestions[tx.id].llc_category})</span>
+                              )}
+                              <span className={`ml-2 text-xs ${aiSuggestions[tx.id].confidence >= 0.7 ? 'text-green-600' : 'text-amber-600'}`}>
+                                {Math.round(aiSuggestions[tx.id].confidence * 100)}% confident
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => applyAiSuggestion(tx.id)}
+                              className="px-3 py-1 bg-violet-600 text-white text-xs rounded-lg hover:bg-violet-700"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 italic">{aiSuggestions[tx.id].reasoning}</p>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleAiSuggest(tx)}
+                          disabled={aiLoading[tx.id]}
+                          className="text-sm text-violet-600 hover:text-violet-800 disabled:opacity-50"
+                        >
+                          {aiLoading[tx.id] ? "Thinking..." : "Ask AI for suggestion"}
+                        </button>
+                      )}
                     </div>
                   )}
 

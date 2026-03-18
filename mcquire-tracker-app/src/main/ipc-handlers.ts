@@ -5,6 +5,7 @@ import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import * as path from 'path'
 import Database from 'better-sqlite3'
 import { reclassifyPendingAfterRuleChange, invalidateTripDateCache } from '../../electron/services/classification-engine'
+import { saveClaudeApiKey, hasClaudeApiKey, deleteClaudeApiKey, suggestClassification, suggestBatch } from '../../electron/services/claude-classifier'
 
 interface AppState {
   db: () => Database.Database | null
@@ -343,5 +344,47 @@ export function registerAppIpcHandlers(state: AppState): void {
     const row = db?.prepare("SELECT value FROM settings WHERE key = 'notification_email'").get() as { value: string } | undefined
     if (!row?.value) return { success: false, error: 'No email configured. Save SMTP settings first.' }
     return await sendTestEmail(row.value)
+  })
+
+  // ── Claude AI Classification ───────────────────────────────────────────────
+
+  ipcMain.handle('claude:has-key', () => {
+    return { success: true, data: hasClaudeApiKey() }
+  })
+
+  ipcMain.handle('claude:save-key', (_event: Electron.IpcMainInvokeEvent, apiKey: string) => {
+    try {
+      saveClaudeApiKey(apiKey)
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('claude:delete-key', () => {
+    deleteClaudeApiKey()
+    return { success: true }
+  })
+
+  ipcMain.handle('claude:suggest', async (_event: Electron.IpcMainInvokeEvent, tx: any) => {
+    const db = getDb()
+    if (!db) return { success: false, error: 'DB not initialized' }
+    try {
+      const suggestion = await suggestClassification(tx, db)
+      return { success: true, data: suggestion }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('claude:suggest-batch', async (_event: Electron.IpcMainInvokeEvent, transactions: any[]) => {
+    const db = getDb()
+    if (!db) return { success: false, error: 'DB not initialized' }
+    try {
+      const suggestions = await suggestBatch(transactions, db)
+      return { success: true, data: suggestions }
+    } catch (err: any) {
+      return { success: false, error: err.message }
+    }
   })
 }
