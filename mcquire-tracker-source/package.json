@@ -15,6 +15,7 @@
     "preview": "electron-vite preview"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "better-sqlite3": "^9.4.3",
     "chokidar": "^3.6.0",
     "electron-updater": "^6.1.7",
