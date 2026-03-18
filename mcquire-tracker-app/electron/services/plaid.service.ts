@@ -543,13 +543,13 @@ export class PlaidService {
     // Look up the existing transaction
     const existing = this.db
       .prepare(
-        `SELECT t.id, t.description_raw, t.amount, t.review_status, t.account_id, a.account_mask
+        `SELECT t.id, t.description_raw, t.amount, t.transaction_date, t.review_status, t.account_id, a.account_mask
          FROM transactions t
          JOIN accounts a ON a.id = t.account_id
          WHERE t.plaid_transaction_id = ?`
       )
       .get(tx.transaction_id) as {
-        id: string; description_raw: string; amount: number;
+        id: string; description_raw: string; amount: number; transaction_date: string;
         review_status: string; account_id: string; account_mask: string
       } | undefined
 
@@ -566,7 +566,7 @@ export class PlaidService {
         const result = classifyTransaction({
           description_raw: newName,
           amount: newAmount,
-          transaction_date: tx.date || existing.description_raw,
+          transaction_date: tx.date || existing.transaction_date,
           account_mask: existing.account_mask,
           category_source: tx.personal_finance_category?.primary,
         }, rules, this.db)
