@@ -21,7 +21,7 @@ import { registerInvestmentsIpcHandlers } from '../../electron/services/investme
 import { registerFinancialStatementsHandlers } from '../../electron/services/financial-statements-ipc'
 import { registerHistoricalImportHandlers } from '../../electron/services/historical-import.service'
 import { AppLifecycleService } from '../../electron/services/app-lifecycle.service'
-import { reclassifyPendingAfterRuleChange } from '../../electron/services/classification-engine'
+import { reclassifyPendingAfterRuleChange, invalidateTripDateCache } from '../../electron/services/classification-engine'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Protocol registration (must happen before app.whenReady)
@@ -338,6 +338,84 @@ function runMigrations(database: Database.Database): void {
     }
 
     database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('004-csv-plaid-dedup-by-mask')
+  }
+
+  // Migration 005: detect and exclude cross-account duplicate transactions.
+  // Fixes the "DoorDash double-charge" bug: same merchant + amount + date appearing
+  // on different cards (different plaid_transaction_id, different account_id).
+  // For each group of duplicates, keeps the oldest record and excludes the rest.
+  if (!applied('005-cross-account-dedup')) {
+    const dupes = database.prepare(`
+      SELECT t2.id
+      FROM transactions t1
+      JOIN transactions t2
+        ON t2.merchant_name = t1.merchant_name
+        AND t2.amount = t1.amount
+        AND t2.transaction_date = t1.transaction_date
+        AND t2.account_id != t1.account_id
+        AND t2.id != t1.id
+      WHERE t1.bucket != 'Exclude'
+        AND t2.bucket != 'Exclude'
+        AND t1.merchant_name IS NOT NULL
+        AND t1.created_at < t2.created_at
+    `).all() as Array<{ id: string }>
+
+    if (dupes.length > 0) {
+      const excludeDupe = database.prepare(`
+        UPDATE transactions
+        SET bucket = 'Exclude', review_status = 'auto_classified',
+            flag_reason = 'Cross-account duplicate (migration 005)',
+            updated_at = datetime('now')
+        WHERE id = ?
+      `)
+      const run = database.transaction(() => {
+        for (const row of dupes) excludeDupe.run(row.id)
+      })
+      run()
+      console.log(`[Migration 005] Excluded ${dupes.length} cross-account duplicate transactions`)
+    }
+
+    database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('005-cross-account-dedup')
+  }
+
+  // Migration 006: backfill source_row_hash for Plaid transactions that don't have one.
+  // Enables future CSV vs Plaid deduplication.
+  if (!applied('006-backfill-source-row-hash')) {
+    const txsWithoutHash = database.prepare(`
+      SELECT t.id, t.transaction_date, t.amount, t.merchant_name, a.account_mask
+      FROM transactions t
+      JOIN accounts a ON a.id = t.account_id
+      WHERE t.source_row_hash IS NULL
+        AND t.plaid_transaction_id IS NOT NULL
+    `).all() as Array<{ id: string; transaction_date: string; amount: number; merchant_name: string; account_mask: string }>
+
+    if (txsWithoutHash.length > 0) {
+      const { createHash } = require('crypto')
+      const updateHash = database.prepare('UPDATE transactions SET source_row_hash = ? WHERE id = ?')
+      const run = database.transaction(() => {
+        for (const tx of txsWithoutHash) {
+          const hash = createHash('sha256')
+            .update(JSON.stringify({
+              date: tx.transaction_date,
+              amount: tx.amount,
+              merchant: tx.merchant_name,
+              account_mask: tx.account_mask,
+            }))
+            .digest('hex')
+          // Use try/catch to handle potential UNIQUE constraint violations
+          // (two transactions could hash to the same value if they're genuine duplicates)
+          try {
+            updateHash.run(hash, tx.id)
+          } catch {
+            // Skip — duplicate hash means duplicate transaction, already handled by migration 005
+          }
+        }
+      })
+      run()
+      console.log(`[Migration 006] Backfilled source_row_hash for ${txsWithoutHash.length} Plaid transactions`)
+    }
+
+    database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('006-backfill-source-row-hash')
   }
 }
 
@@ -907,12 +985,14 @@ function registerAppIpcHandlers(): void {
     db.prepare(
       'INSERT INTO personal_trip_dates (id, trip_name, start_date, end_date) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET trip_name=excluded.trip_name, start_date=excluded.start_date, end_date=excluded.end_date'
     ).run(id, trip.trip_name, trip.start_date, trip.end_date)
+    invalidateTripDateCache()
     return { success: true, data: id }
   })
 
   ipcMain.handle('trips:delete', (_event, id: string) => {
     if (!db) return { success: false }
     db.prepare('DELETE FROM personal_trip_dates WHERE id = ?').run(id)
+    invalidateTripDateCache()
     return { success: true }
   })
 
