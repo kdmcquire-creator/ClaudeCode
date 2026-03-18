@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react"
 
 type Tab = "accounts" | "rules" | "sync" | "notifications" | "trips"
 
-const RULE_SECTIONS = ["llc_always", "p10_always", "p10_conditional", "personal_override", "special", "ask_kyle"]
+const RULE_SECTIONS = ["exclusion", "llc_always", "p10_always", "p10_conditional", "personal_override", "special", "ask_kyle"]
 const RULE_ACTIONS = ["classify", "ask_kyle", "exclude", "split_flag"]
 const MATCH_TYPES = ["contains", "exact", "starts_with", "regex"]
 const BUCKETS = ["Peak 10", "Moonsmoke LLC", "Personal", "Watersound Investments LLC", "Exclude"]
@@ -19,6 +19,7 @@ const LLC_CATEGORIES = [
 ]
 
 const sectionColor: Record<string, string> = {
+  exclusion: "bg-red-100 text-red-700",
   llc_always: "bg-green-100 text-green-700",
   p10_always: "bg-blue-100 text-blue-700",
   p10_conditional: "bg-sky-100 text-sky-700",
@@ -421,8 +422,8 @@ function RulesTab() {
             {trips.length === 0 && <p className="text-sm text-blue-600">No trips. NYC Trip (Nov 24–28, 2025) should be seeded at init.</p>}
             {trips.map((t: any) => (
               <div key={t.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-sm">
-                <span className="font-medium text-slate-700">{t.name}</span>
-                <span className="text-slate-500">{t.start} → {t.end}</span>
+                <span className="font-medium text-slate-700">{t.trip_name}</span>
+                <span className="text-slate-500">{t.start_date} → {t.end_date}</span>
                 <button onClick={async () => { try { await window.api.trips.delete(t.id) } catch {}; load() }} className="text-red-400 hover:text-red-600 text-xs">Delete</button>
               </div>
             ))}
@@ -439,7 +440,7 @@ function RulesTab() {
             ))}
             <button onClick={async () => {
               if (!tripForm.name || !tripForm.start || !tripForm.end) { alert("Fill all fields"); return }
-              try { await window.api.trips.save(tripForm) } catch {}
+              try { await window.api.trips.save({ trip_name: tripForm.name, start_date: tripForm.start, end_date: tripForm.end }) } catch {}
               setTripForm({ name: "", start: "", end: "" }); load()
             }} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">Add</button>
           </div>
@@ -533,15 +534,23 @@ function TripsTab() {
 
   const handleSave = async () => {
     if (!editing || !editing.trip_name || !editing.start_date || !editing.end_date) return
-    await (window as any).api.trips.save(editing)
-    setEditing(null)
-    load()
+    try {
+      await (window as any).api.trips.save(editing)
+      setEditing(null)
+      load()
+    } catch (e: any) {
+      alert("Failed to save trip: " + (e?.message ?? "unknown error"))
+    }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this trip exclusion?")) return
-    await (window as any).api.trips.delete(id)
-    load()
+    try {
+      await (window as any).api.trips.delete(id)
+      load()
+    } catch (e: any) {
+      alert("Failed to delete trip: " + (e?.message ?? "unknown error"))
+    }
   }
 
   if (loading) return <p className="text-slate-400 text-sm">Loading trips…</p>

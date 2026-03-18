@@ -59,7 +59,7 @@ function ruleMatches(rule: Rule, tx: {
     // Normal matching
     switch (rule.match_type) {
       case 'exact':
-        if (tx.merchantNorm !== mv && !tx.originalDescription?.toLowerCase().includes(mv)) return false
+        if (tx.merchantNorm !== mv) return false
         break
       case 'contains':
         if (!tx.merchantNorm.includes(mv) && !tx.originalDescription?.toLowerCase().includes(mv)) return false

@@ -657,7 +657,17 @@ app.on('window-all-closed', () => {
 // Bootstrap all services — called once DB is ready (either on startup or after
 // the setup wizard picks a sync folder)
 // ─────────────────────────────────────────────────────────────────────────────
+let _servicesBootstrapped = false
+
 async function bootstrapServices(folder: string): Promise<void> {
+  // Guard against double-registration of IPC handlers (crashes on folder switch)
+  if (_servicesBootstrapped) {
+    console.warn('[Main] Services already bootstrapped — reinitializing DB only')
+    db = initDatabase(folder)
+    return
+  }
+  _servicesBootstrapped = true
+
   // Initialize folder structure + database
   initSyncFolderStructure(folder)
   db = initDatabase(folder)
