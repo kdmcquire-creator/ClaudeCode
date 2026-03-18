@@ -902,8 +902,9 @@ function registerAppIpcHandlers(): void {
     if (filters.startDate) { sql += ' AND t.transaction_date >= ?'; params.push(filters.startDate) }
     if (filters.endDate) { sql += ' AND t.transaction_date <= ?'; params.push(filters.endDate) }
     if (filters.search) { sql += ' AND t.merchant_name LIKE ?'; params.push(`%${filters.search}%`) }
-    const limitVal = typeof filters.limit === 'number' ? filters.limit : 2000
-    sql += ` ORDER BY t.transaction_date DESC LIMIT ${limitVal}`
+    const limitVal = Math.max(1, Math.min(Math.floor(Number(filters.limit) || 2000), 10000))
+    sql += ' ORDER BY t.transaction_date DESC LIMIT ?'
+    params.push(limitVal)
     const rows = db.prepare(sql).all(...params)
     return { success: true, data: rows }
   })
@@ -1011,7 +1012,12 @@ function registerAppIpcHandlers(): void {
   // ── Shell: open file in Explorer ───────────────────────────────────────────
 
   ipcMain.handle('shell:open-path', (_event, filePath: string) => {
-    shell.showItemInFolder(filePath)
+    // Restrict to sync folder to prevent path traversal reconnaissance
+    const resolved = path.resolve(filePath)
+    if (syncFolderPath && !resolved.startsWith(path.resolve(syncFolderPath))) {
+      return { success: false, error: 'Path outside sync folder' }
+    }
+    shell.showItemInFolder(resolved)
     return { success: true }
   })
 

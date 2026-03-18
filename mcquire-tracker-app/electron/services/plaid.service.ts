@@ -354,6 +354,16 @@ export class PlaidService {
       this.invalidateRuleCache()
       result.error = errorCode
       this.finishSyncLog(logId, 'error', result, errorCode)
+
+      // Strip sensitive headers (PLAID-SECRET, access tokens) before propagating
+      if (err?.response?.config?.headers) {
+        delete err.response.config.headers['PLAID-SECRET']
+        delete err.response.config.headers['PLAID-CLIENT-ID']
+      }
+      if (err?.config?.headers) {
+        delete err.config.headers['PLAID-SECRET']
+        delete err.config.headers['PLAID-CLIENT-ID']
+      }
       throw err
     }
   }

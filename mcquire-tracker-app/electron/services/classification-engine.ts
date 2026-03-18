@@ -68,7 +68,14 @@ function ruleMatches(rule: Rule, tx: {
         if (!tx.merchantNorm.startsWith(mv)) return false
         break
       case 'regex':
-        if (!new RegExp(mv, 'i').test(tx.merchantNorm)) return false
+        try {
+          // Guard against catastrophic backtracking: reject patterns with nested quantifiers
+          if (/(\+|\*|\?)\{?\d*,?\d*\}?\)*(\+|\*|\?)/.test(mv)) return false
+          if (!new RegExp(mv, 'i').test(tx.merchantNorm)) return false
+        } catch {
+          // Invalid regex — treat as no match
+          return false
+        }
         break
     }
   }
