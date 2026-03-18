@@ -25,6 +25,11 @@ const WHITE     = 'FFFFFF'
 const LLC_GREEN = 'E2EFDA'
 const LLC_DKGRN = '375623'
 
+// Split-parent exclusion: when a transaction has been split into children,
+// exclude the parent from aggregation to prevent double-counting.
+// Use with alias 't': AND NOT_SPLIT_PARENT
+const NOT_SPLIT_PARENT = "NOT EXISTS (SELECT 1 FROM transactions _sp WHERE _sp.split_parent_id = t.id)"
+
 // ─── Format helpers ───────────────────────────────────────────────────────────
 
 function currencyCell(cell: ExcelJS.Cell, value: number | null) {
@@ -701,6 +706,7 @@ export class FinancialStatementsService {
          AND t.bucket = 'Moonsmoke LLC'
          AND t.llc_category LIKE '%Revenue%'
          AND t.bucket != 'Exclude'
+         AND ${NOT_SPLIT_PARENT}
          GROUP BY month`
       )
       .all() as Array<{ month: string; total: number }>
@@ -727,13 +733,14 @@ export class FinancialStatementsService {
   }> {
     const rows = this.db
       .prepare(
-        `SELECT llc_category as category,
-                strftime('%Y-%m', transaction_date) as month,
-                SUM(ABS(amount)) as total
-         FROM transactions
-         WHERE bucket = 'Moonsmoke LLC'
-         AND llc_category IS NOT NULL
-         AND review_status != 'pending_review'
+        `SELECT t.llc_category as category,
+                strftime('%Y-%m', t.transaction_date) as month,
+                SUM(ABS(t.amount)) as total
+         FROM transactions t
+         WHERE t.bucket = 'Moonsmoke LLC'
+         AND t.llc_category IS NOT NULL
+         AND t.review_status != 'pending_review'
+         AND ${NOT_SPLIT_PARENT}
          GROUP BY category, month
          ORDER BY category, month`
       )
@@ -801,7 +808,8 @@ export class FinancialStatementsService {
          JOIN accounts a ON a.id = t.account_id
          WHERE a.account_mask = '2255'
          AND t.transaction_date <= ?
-         AND t.bucket != 'Exclude'`
+         AND t.bucket != 'Exclude'
+         AND ${NOT_SPLIT_PARENT}`
       )
       .get(asOf) as { balance: number | null }
     return result?.balance ?? null
@@ -875,11 +883,12 @@ export class FinancialStatementsService {
              WHEN transaction_date BETWEEN '2025-10-01' AND '2025-12-31' THEN 'q4_2025'
              ELSE strftime('%Y-%m', transaction_date)
            END as period,
-           SUM(ABS(amount)) as total
-         FROM transactions
-         WHERE bucket = 'Moonsmoke LLC'
-         AND llc_category ${exact ? "= ?" : "NOT IN ('Payroll - Salary','Taxes - Payroll','Rent - Business Lodging','Revenue')"}
-         AND review_status != 'pending_review'
+           SUM(ABS(t.amount)) as total
+         FROM transactions t
+         WHERE t.bucket = 'Moonsmoke LLC'
+         AND t.llc_category ${exact ? "= ?" : "NOT IN ('Payroll - Salary','Taxes - Payroll','Rent - Business Lodging','Revenue')"}
+         AND t.review_status != 'pending_review'
+         AND ${NOT_SPLIT_PARENT}
          GROUP BY period`
       )
       .all(exact ? category : undefined) as Array<{ period: string; total: number }>
@@ -905,6 +914,7 @@ export class FinancialStatementsService {
            OR t.merchant_name LIKE '%Zelle%'
            OR t.merchant_name LIKE '%Interest%'
          )
+         AND ${NOT_SPLIT_PARENT}
          GROUP BY t.merchant_name`
       )
       .all(String(year)) as Array<{ merchant_name: string; total: number }>
@@ -934,6 +944,7 @@ export class FinancialStatementsService {
          AND strftime('%Y', t.transaction_date) = ?
          AND t.review_status != 'pending_review'
          AND t.bucket != 'Exclude'
+         AND ${NOT_SPLIT_PARENT}
          GROUP BY category
          ORDER BY total DESC`
       )
@@ -959,7 +970,8 @@ export class FinancialStatementsService {
          AND t.merchant_name NOT LIKE '%UBS%'
          AND t.merchant_name NOT LIKE '%Mobile Deposit%'
          AND t.merchant_name NOT LIKE '%Zelle%'
-         AND t.merchant_name NOT LIKE '%Interest%'`
+         AND t.merchant_name NOT LIKE '%Interest%'
+         AND ${NOT_SPLIT_PARENT}`
       )
       .get(String(year)) as { total: number | null }
     return row?.total || 0

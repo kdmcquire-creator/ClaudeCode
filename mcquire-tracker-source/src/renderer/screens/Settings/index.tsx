@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react"
 
-type Tab = "accounts" | "rules" | "sync" | "notifications"
+type Tab = "accounts" | "rules" | "sync" | "notifications" | "trips"
 
 const RULE_SECTIONS = ["llc_always", "p10_always", "p10_conditional", "personal_override", "special", "ask_kyle"]
 const RULE_ACTIONS = ["classify", "ask_kyle", "exclude", "split_flag"]
@@ -33,15 +33,16 @@ export default function Settings() {
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-slate-800 mb-5">Settings</h1>
       <div className="flex border-b border-slate-200 mb-6 gap-1">
-        {(["accounts", "rules", "sync", "notifications"] as Tab[]).map(t => (
+        {(["accounts", "rules", "trips", "sync", "notifications"] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${tab === t ? "bg-white border border-b-white border-slate-200 text-blue-600 -mb-px" : "text-slate-500 hover:text-slate-700"}`}>
-            {t === "accounts" ? "Account Management" : t === "rules" ? "Rule Editor" : t === "sync" ? "Sync & Schedule" : "Notifications"}
+            {t === "accounts" ? "Account Management" : t === "rules" ? "Rule Editor" : t === "trips" ? "Personal Trips" : t === "sync" ? "Sync & Schedule" : "Notifications"}
           </button>
         ))}
       </div>
       {tab === "accounts" && <AccountsTab />}
       {tab === "rules" && <RulesTab />}
+      {tab === "trips" && <TripsTab />}
       {tab === "sync" && <SyncTab />}
       {tab === "notifications" && <NotificationsTab />}
     </div>
@@ -507,6 +508,114 @@ function RulesTab() {
               <button onClick={() => setEditRule(null)} className="flex-1 py-2 border border-slate-300 rounded-lg text-sm">Cancel</button>
               <button onClick={saveRule} disabled={saving} className="flex-1 py-2 bg-slate-800 text-white rounded-lg text-sm disabled:opacity-50">{saving ? "Saving..." : "Save Rule"}</button>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Trips Tab ──────────────────────────────────────────────────────────────────
+// Manages personal trip exclusion dates used by the Mon-Thu conditional restaurant rule.
+// During these date ranges, restaurant charges are classified as Personal instead of Peak 10.
+function TripsTab() {
+  const [trips, setTrips] = useState<Array<{ id: string; trip_name: string; start_date: string; end_date: string }>>([])
+  const [editing, setEditing] = useState<{ id?: string; trip_name: string; start_date: string; end_date: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    const res = await (window as any).api.trips.getAll()
+    if (res.success) setTrips(res.data)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSave = async () => {
+    if (!editing || !editing.trip_name || !editing.start_date || !editing.end_date) return
+    await (window as any).api.trips.save(editing)
+    setEditing(null)
+    load()
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this trip exclusion?")) return
+    await (window as any).api.trips.delete(id)
+    load()
+  }
+
+  if (loading) return <p className="text-slate-400 text-sm">Loading trips…</p>
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Personal Trip Exclusion Dates</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            During these date ranges, restaurant charges on weekdays are classified as <strong>Personal</strong> instead of Peak 10 business meals.
+            This prevents the Mon–Thu conditional restaurant rule from auto-classifying meals on personal vacations.
+          </p>
+        </div>
+        <button onClick={() => setEditing({ trip_name: "", start_date: "", end_date: "" })}
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 whitespace-nowrap">
+          + Add Trip
+        </button>
+      </div>
+
+      {trips.length === 0 && !editing && (
+        <p className="text-slate-400 text-sm py-8 text-center">No personal trip dates configured. Click "Add Trip" to create one.</p>
+      )}
+
+      {trips.map(trip => (
+        <div key={trip.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-4 mb-3">
+          <div>
+            <span className="font-medium text-slate-800">{trip.trip_name}</span>
+            <span className="text-slate-500 text-sm ml-3">{trip.start_date} – {trip.end_date}</span>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setEditing(trip)}
+              className="text-sm text-blue-600 hover:text-blue-800">Edit</button>
+            <button onClick={() => handleDelete(trip.id)}
+              className="text-sm text-red-500 hover:text-red-700">Delete</button>
+          </div>
+        </div>
+      ))}
+
+      {editing && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+          <h3 className="text-sm font-semibold text-blue-800 mb-3">
+            {editing.id ? "Edit Trip" : "New Trip Exclusion"}
+          </h3>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs text-slate-500">Trip Name</label>
+              <input type="text" value={editing.trip_name} placeholder="e.g., NYC Thanksgiving 2025"
+                onChange={e => setEditing({ ...editing, trip_name: e.target.value })}
+                className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Start Date</label>
+              <input type="date" value={editing.start_date}
+                onChange={e => setEditing({ ...editing, start_date: e.target.value })}
+                className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">End Date</label>
+              <input type="date" value={editing.end_date}
+                onChange={e => setEditing({ ...editing, end_date: e.target.value })}
+                className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm" />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={handleSave}
+              disabled={!editing.trip_name || !editing.start_date || !editing.end_date}
+              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-40">
+              Save
+            </button>
+            <button onClick={() => setEditing(null)}
+              className="px-4 py-1.5 text-slate-600 text-sm hover:text-slate-800">
+              Cancel
+            </button>
           </div>
         </div>
       )}

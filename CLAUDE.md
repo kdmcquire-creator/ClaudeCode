@@ -26,7 +26,7 @@ Desktop Electron app for **Kyle McQuire's** personal financial tracking across t
 - Never rename or drop columns without an explicit migration + Kyle's sign-off
 
 ### Never Do
-- Push to any branch other than `claude/review-mcquire-handoff-FM8z6`
+- Push to any branch other than the assigned Claude branch (check task instructions)
 - Destructive schema changes (drop table, rename column)
 - Touch `manually_classified` transactions — that status means Kyle made the decision
 

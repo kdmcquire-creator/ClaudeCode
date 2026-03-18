@@ -143,6 +143,16 @@ function initDatabase(folder: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_rules_priority ON rules(priority_order) WHERE is_active = 1;
 
+    -- Performance indices for common queries
+    CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(transaction_date);
+    CREATE INDEX IF NOT EXISTS idx_tx_bucket ON transactions(bucket);
+    CREATE INDEX IF NOT EXISTS idx_tx_review ON transactions(review_status);
+    CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id);
+    CREATE INDEX IF NOT EXISTS idx_tx_split_parent ON transactions(split_parent_id) WHERE split_parent_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_tx_merchant ON transactions(merchant_name);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_plaid_id ON transactions(plaid_transaction_id) WHERE plaid_transaction_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_hash ON transactions(source_row_hash) WHERE source_row_hash IS NOT NULL;
+
     -- Vendors (merchant normalization)
     CREATE TABLE IF NOT EXISTS vendors (
       id             TEXT PRIMARY KEY,
@@ -832,10 +842,11 @@ function registerAppIpcHandlers(): void {
     if (!db) return { success: true, data: {} }
     const rows = db
       .prepare(
-        `SELECT bucket, SUM(ABS(amount)) as total, COUNT(*) as count
-         FROM transactions
-         WHERE bucket != 'Exclude' AND bucket IS NOT NULL
-         GROUP BY bucket`
+        `SELECT t.bucket, SUM(ABS(t.amount)) as total, COUNT(*) as count
+         FROM transactions t
+         WHERE t.bucket != 'Exclude' AND t.bucket IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM transactions _sp WHERE _sp.split_parent_id = t.id)
+         GROUP BY t.bucket`
       )
       .all() as Array<{ bucket: string; total: number; count: number }>
     const result: Record<string, { total: number; count: number }> = {}
@@ -884,7 +895,8 @@ function registerAppIpcHandlers(): void {
       SELECT t.*, a.institution, a.account_name, a.account_mask
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id
-      WHERE t.bucket != 'Exclude' OR t.bucket IS NULL`
+      WHERE (t.bucket != 'Exclude' OR t.bucket IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM transactions _sp WHERE _sp.split_parent_id = t.id)`
     const params: any[] = []
     if (filters.bucket) { sql += ' AND t.bucket = ?'; params.push(filters.bucket) }
     if (filters.startDate) { sql += ' AND t.transaction_date >= ?'; params.push(filters.startDate) }

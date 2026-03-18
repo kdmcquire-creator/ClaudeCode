@@ -17,6 +17,8 @@ import { v4 as uuidv4 } from 'uuid'
 import * as path from 'path'
 import * as fs from 'fs'
 import type { SyncResult } from '../../src/shared/plaid.types'
+import { classifyTransaction, loadActiveRules, normalizeMerchant, hashRow } from './classification-engine'
+import type { Rule } from '../../src/shared/types'
 
 // ─── Credential helpers (Windows Credential Manager via safeStorage) ───────────
 
@@ -268,6 +270,9 @@ export class PlaidService {
     }
 
     try {
+      // Pre-cache rules for the entire sync batch (avoids N queries for N transactions)
+      this.invalidateRuleCache()
+
       // Load stored cursor (if any)
       const cursorRow = this.db
         .prepare('SELECT value FROM settings WHERE key = ?')
@@ -334,6 +339,7 @@ export class PlaidService {
         .prepare("UPDATE accounts SET last_synced_at = datetime('now') WHERE plaid_item_id = ?")
         .run(plaidItemId)
 
+      this.invalidateRuleCache()
       this.finishSyncLog(logId, 'success', result)
       return result
     } catch (err: any) {
@@ -345,6 +351,7 @@ export class PlaidService {
         .prepare('UPDATE plaid_items SET status = ?, error_code = ? WHERE plaid_item_id = ?')
         .run(isReauthNeeded ? 'login_required' : 'error', errorCode, plaidItemId)
 
+      this.invalidateRuleCache()
       result.error = errorCode
       this.finishSyncLog(logId, 'error', result, errorCode)
       throw err
@@ -383,8 +390,51 @@ export class PlaidService {
 
   // ─── Transaction Import Helpers ───────────────────────────────────────────────
 
+  // Cached rules for batch import — avoids re-querying DB per transaction
+  private _cachedRules: Rule[] | null = null
+
+  private getCachedRules(): Rule[] {
+    if (!this._cachedRules) {
+      this._cachedRules = loadActiveRules(this.db)
+    }
+    return this._cachedRules
+  }
+
+  /** Call before a sync batch to load rules once; call after to release. */
+  invalidateRuleCache(): void {
+    this._cachedRules = null
+  }
+
+  /**
+   * Cross-account duplicate check.
+   * Catches the DoorDash-type bug: same dollar amount, same merchant, same date
+   * appearing on different cards (different plaid_transaction_id).
+   *
+   * Only flags as duplicate when there is EXACTLY ONE existing match — if the user
+   * legitimately has 2+ identical charges on the same day (e.g., two separate
+   * DoorDash orders for the same amount), we let them through for manual review.
+   */
+  private isCrossAccountDuplicate(
+    merchantNorm: string,
+    amount: number,
+    date: string,
+    accountId: string
+  ): boolean {
+    const matches = this.db
+      .prepare(
+        `SELECT COUNT(*) as n FROM transactions t
+         WHERE t.account_id != ?
+           AND t.merchant_name = ?
+           AND t.amount = ?
+           AND t.transaction_date = ?
+           AND t.bucket != 'Exclude'`
+      )
+      .get(accountId, merchantNorm, amount, date) as { n: number }
+    return matches.n === 1
+  }
+
   private importPlaidTransaction(tx: any, _plaidItemId: string): 'new' | 'duplicate' | 'queued' {
-    // Deduplicate
+    // Deduplicate by Plaid transaction ID (same transaction re-synced)
     const existing = this.db
       .prepare('SELECT id FROM transactions WHERE plaid_transaction_id = ?')
       .get(tx.transaction_id)
@@ -396,37 +446,71 @@ export class PlaidService {
       .get(tx.account_id) as { id: string; account_mask: string; default_bucket: string } | undefined
     if (!account) return 'duplicate' // account not tracked
 
+    const merchantNorm = normalizeMerchant(tx.name)
+
+    // Generate a content hash for this transaction (enables CSV vs Plaid dedup)
+    const rowHash = hashRow({
+      date: tx.date,
+      amount: tx.amount,
+      merchant: merchantNorm,
+      account_mask: account.account_mask,
+    })
+
+    // Cross-account dedup: catches DoorDash (and similar) charges that appear
+    // on multiple cards with the same amount + date + merchant.
+    if (this.isCrossAccountDuplicate(merchantNorm, tx.amount, tx.date, account.id)) {
+      console.log(
+        `[PlaidService] Cross-account duplicate skipped: ${tx.name} $${tx.amount} on ${tx.date}`
+      )
+      // Still record the plaid_transaction_id so we don't re-process on next sync,
+      // but mark it as Exclude so it doesn't appear in reports or review queue.
+      this.db
+        .prepare(
+          `INSERT INTO transactions
+            (id, account_id, plaid_transaction_id, source_row_hash, transaction_date,
+             description_raw, merchant_name, amount, category_source, bucket,
+             review_status, flag_reason, is_split_child, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Exclude', 'auto_classified',
+                   'Cross-account duplicate', 0, datetime('now'), datetime('now'))`
+        )
+        .run(
+          uuidv4(), account.id, tx.transaction_id, rowHash, tx.date,
+          tx.name, merchantNorm, tx.amount,
+          tx.personal_finance_category?.primary || null
+        )
+      return 'duplicate'
+    }
+
     // Build raw transaction object for the classification engine
-    const rawTx = {
+    const rawTx: Record<string, any> = {
       id: uuidv4(),
       account_id: account.id,
       plaid_transaction_id: tx.transaction_id,
-      source_row_hash: null,
+      source_row_hash: rowHash,
       transaction_date: tx.date,
       posting_date: tx.datetime?.split('T')[0] || null,
       description_raw: tx.name,
-      merchant_name: tx.merchant_name || tx.name,
+      merchant_name: merchantNorm,
       amount: tx.amount, // Plaid: positive = debit
-      account_mask: account.account_mask, // required by ruleMatches for account_mask_filter rules
+      account_mask: account.account_mask,
       category_source: tx.personal_finance_category?.primary || null,
-      bucket: null,
-      p10_category: null,
-      llc_category: null,
-      description_notes: null,
-      rule_id: null,
+      bucket: null as string | null,
+      p10_category: null as string | null,
+      llc_category: null as string | null,
+      description_notes: null as string | null,
+      rule_id: null as string | null,
       review_status: 'pending_review',
-      flag_reason: null,
-      split_parent_id: null,
+      flag_reason: null as string | null,
+      split_parent_id: null as string | null,
       is_split_child: 0,
-      period_label: null,
-      expense_report_id: null,
+      period_label: null as string | null,
+      expense_report_id: null as string | null,
     }
 
-    // Run classification engine
+    // Run classification engine (using cached rules)
     try {
-      const { classifyTransaction, loadActiveRules } = require('./classification-engine')
-      const rules = loadActiveRules(this.db)
-      const result = classifyTransaction(rawTx, rules, this.db)
+      const rules = this.getCachedRules()
+      const result = classifyTransaction(rawTx as any, rules, this.db)
       Object.assign(rawTx, result)
     } catch (err) {
       console.error('[PlaidService] Classification error for tx:', rawTx.description_raw, err)
@@ -456,14 +540,66 @@ export class PlaidService {
   }
 
   private updatePlaidTransaction(tx: any): void {
-    // Re-run classification on modified transactions that are still pending
+    // Look up the existing transaction
+    const existing = this.db
+      .prepare(
+        `SELECT t.id, t.description_raw, t.amount, t.review_status, t.account_id, a.account_mask
+         FROM transactions t
+         JOIN accounts a ON a.id = t.account_id
+         WHERE t.plaid_transaction_id = ?`
+      )
+      .get(tx.transaction_id) as {
+        id: string; description_raw: string; amount: number;
+        review_status: string; account_id: string; account_mask: string
+      } | undefined
+
+    if (!existing) return
+
+    const newName = tx.merchant_name || tx.name
+    const newAmount = tx.amount
+    const merchantNorm = normalizeMerchant(newName)
+
+    // If amount or merchant changed AND transaction isn't manually classified, reclassify
+    if (existing.review_status !== 'manually_classified') {
+      try {
+        const rules = this.getCachedRules()
+        const result = classifyTransaction({
+          description_raw: newName,
+          amount: newAmount,
+          transaction_date: tx.date || existing.description_raw,
+          account_mask: existing.account_mask,
+          category_source: tx.personal_finance_category?.primary,
+        }, rules, this.db)
+
+        this.db
+          .prepare(
+            `UPDATE transactions SET
+               merchant_name = ?, amount = ?, description_raw = ?,
+               bucket = ?, p10_category = ?, llc_category = ?,
+               description_notes = ?, rule_id = ?, review_status = ?,
+               flag_reason = ?, updated_at = datetime('now')
+             WHERE id = ?`
+          )
+          .run(
+            merchantNorm, newAmount, newName,
+            result.bucket, result.p10_category, result.llc_category,
+            result.description_notes, result.rule_id, result.review_status,
+            result.flag_reason, existing.id
+          )
+        return
+      } catch (err) {
+        console.error('[PlaidService] Reclassification error on modified tx:', err)
+      }
+    }
+
+    // Fallback: just update amount/merchant without reclassifying (manually_classified)
     this.db
       .prepare(
         `UPDATE transactions SET
            merchant_name = ?, amount = ?, updated_at = datetime('now')
-         WHERE plaid_transaction_id = ? AND review_status = 'pending_review'`
+         WHERE plaid_transaction_id = ?`
       )
-      .run(tx.merchant_name || tx.name, tx.amount, tx.transaction_id)
+      .run(merchantNorm, newAmount, tx.transaction_id)
   }
 
   // ─── Access Token helpers (for re-auth) ──────────────────────────────────────

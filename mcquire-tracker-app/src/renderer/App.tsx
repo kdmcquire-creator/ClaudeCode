@@ -40,6 +40,24 @@ export default function App() {
       }
     } catch {}
 
+    // Auto-refresh pending count after sync completes or import finishes
+    try {
+      const ipc = (window as any).electron?.ipcRenderer
+      const refreshCount = () => {
+        window.api?.db?.getReviewCount?.().then((res: any) => {
+          const count = res?.data ?? res ?? 0
+          if (typeof count === 'number') setPendingCount(count)
+        }).catch(() => {})
+      }
+      ipc?.on('event:sync-completed', refreshCount)
+      ipc?.on('import:watched-folder-complete', refreshCount)
+      // Also refresh periodically (every 30s) to catch changes from other screens
+      const interval = setInterval(refreshCount, 30000)
+      // Initial load
+      refreshCount()
+      return () => clearInterval(interval)
+    } catch {}
+
     // Fallback: check sync folder to determine first run
     const checkReady = async () => {
       try {
