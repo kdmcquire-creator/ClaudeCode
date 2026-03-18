@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { P10_CATEGORIES, LLC_CATEGORIES } from "../../shared/types"
+import type { RuleMatchType } from "../../shared/types"
 
 function unwrap<T>(res: any, fallback: T): T {
   if (res === null || res === undefined) return fallback
@@ -101,19 +102,7 @@ export default function ReviewQueue({ onPendingChange }: Props) {
       await window.api.transactions.classify(tx.id, update)
 
       if (cs.createRule && cs.bucket !== "Exclude") {
-        const rule: any = {
-          rule_name: `${tx.merchant_name ?? tx.description_raw} — ${cs.bucket}`,
-          section: cs.bucket === "Peak 10" ? "p10_always" : cs.bucket === "Moonsmoke LLC" ? "llc_always" : cs.bucket === "Watersound Investments LLC" ? "llc_always" : "personal_override",
-          match_type: "contains",
-          match_value: (tx.merchant_name ?? tx.description_raw ?? "").toLowerCase(),
-          bucket: cs.bucket,
-          p10_category: cs.bucket === "Peak 10" ? (cs.category ?? "") : null,
-          llc_category: cs.bucket === "Moonsmoke LLC" ? (cs.category ?? "") : null,
-          description_notes: cs.notes ?? "",
-          action: "classify",
-          priority_order: 850,
-          is_active: 1,
-        }
+        const rule = buildRuleFromClassification(tx, cs)
         const ruleResult = await window.api.rules.save(rule)
         if (ruleResult?.success === false) {
           console.error('Rule save failed:', ruleResult.error)
@@ -152,6 +141,77 @@ export default function ReviewQueue({ onPendingChange }: Props) {
 
   const isAttSplit = (tx: any) =>
     tx.flag_reason?.toLowerCase().includes('at&t') && Math.abs(tx.amount) >= 300
+
+  /** Build a smart rule from a manual classification decision */
+  const buildRuleFromClassification = (tx: any, cs: any) => {
+    const merchant = (tx.merchant_name ?? tx.description_raw ?? "").toLowerCase().trim()
+
+    // Determine section and priority range based on bucket
+    let section: string
+    let priorityBase: number
+    switch (cs.bucket) {
+      case "Peak 10":
+        section = "p10_always"
+        priorityBase = 390 // end of P10 Always range (300-399)
+        break
+      case "Moonsmoke LLC":
+        section = "llc_always"
+        priorityBase = 290 // end of LLC Always range (200-299)
+        break
+      case "Personal":
+        section = "personal_override"
+        priorityBase = 590 // end of Personal Overrides range (500-599)
+        break
+      default:
+        section = "llc_always"
+        priorityBase = 290
+    }
+
+    // Choose match type: use 'exact' for short merchants, 'contains' otherwise
+    const matchType: RuleMatchType = merchant.length <= 6 ? "exact" : "contains"
+
+    // Determine match value — strip common prefixes for cleaner matching
+    let matchValue = merchant
+      .replace(/^tst\*\s*/i, '')
+      .replace(/^sq\s+\*\s*/i, '')
+      .replace(/^py\s+\*/i, '')
+      .replace(/\s+#\d+$/, '')       // trailing store numbers
+      .replace(/\s+\d{4,}$/, '')     // trailing card/ref numbers
+      .replace(/[^a-z0-9\s&\-'.]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    // Use the custom match value if the user edited it
+    if (cs.ruleMatchValue && cs.ruleMatchValue.trim()) {
+      matchValue = cs.ruleMatchValue.trim().toLowerCase()
+    }
+
+    const ruleMatchType = cs.ruleMatchType ?? matchType
+
+    return {
+      rule_name: `${tx.merchant_name ?? tx.description_raw} — ${cs.bucket}`,
+      section,
+      match_type: ruleMatchType,
+      match_value: matchValue,
+      account_mask_filter: cs.ruleAccountFilter ?? null,
+      bucket: cs.bucket,
+      p10_category: cs.bucket === "Peak 10" ? (cs.category ?? "") : null,
+      llc_category: cs.bucket === "Moonsmoke LLC" ? (cs.category ?? "") : null,
+      description_notes: cs.notes ?? "",
+      action: "classify",
+      priority_order: priorityBase,
+      is_active: 1,
+    }
+  }
+
+  /** Preview text for the rule that would be created */
+  const getRulePreview = (tx: any, cs: any) => {
+    if (!cs.bucket || cs.bucket === "Exclude" || !cs.createRule) return null
+    const rule = buildRuleFromClassification(tx, cs)
+    const matchLabel = rule.match_type === "exact" ? "exactly matches" : rule.match_type === "starts_with" ? "starts with" : "contains"
+    const catLabel = rule.p10_category ? ` → ${rule.p10_category}` : rule.llc_category ? ` → ${rule.llc_category}` : ""
+    return `Rule: if merchant ${matchLabel} "${rule.match_value}" → ${cs.bucket}${catLabel} (priority ${rule.priority_order})`
+  }
 
   const handleAttSplit = async (tx: any) => {
     const p10Amount = parseFloat(attAmt[tx.id] ?? "")
@@ -458,17 +518,60 @@ export default function ReviewQueue({ onPendingChange }: Props) {
                     )}
                   </div>
 
-                  {/* Create rule toggle */}
+                  {/* Create rule toggle + preview */}
                   {cs.bucket && cs.bucket !== "Exclude" && (
-                    <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={cs.createRule ?? false}
-                        onChange={e => setCs(tx.id, { createRule: e.target.checked })}
-                        className="rounded"
-                      />
-                      Always classify "{tx.merchant_name || tx.description_raw}" as {cs.bucket}
-                    </label>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={cs.createRule ?? false}
+                          onChange={e => setCs(tx.id, { createRule: e.target.checked })}
+                          className="rounded"
+                        />
+                        Create rule: always classify "{tx.merchant_name || tx.description_raw}" as {cs.bucket}
+                      </label>
+
+                      {cs.createRule && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+                          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Rule Preview</p>
+                          <p className="text-xs text-slate-600 font-mono">{getRulePreview(tx, cs)}</p>
+
+                          <div className="grid grid-cols-3 gap-2 mt-2">
+                            <div>
+                              <label className="text-xs text-slate-500 block mb-1">Match type</label>
+                              <select
+                                value={cs.ruleMatchType ?? ((tx.merchant_name ?? tx.description_raw ?? "").length <= 6 ? "exact" : "contains")}
+                                onChange={e => setCs(tx.id, { ruleMatchType: e.target.value })}
+                                className="w-full border border-slate-300 rounded px-2 py-1 text-xs"
+                              >
+                                <option value="contains">contains</option>
+                                <option value="exact">exact</option>
+                                <option value="starts_with">starts with</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-500 block mb-1">Match value</label>
+                              <input
+                                type="text"
+                                value={cs.ruleMatchValue ?? buildRuleFromClassification(tx, cs).match_value}
+                                onChange={e => setCs(tx.id, { ruleMatchValue: e.target.value })}
+                                className="w-full border border-slate-300 rounded px-2 py-1 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-500 block mb-1">Account filter</label>
+                              <input
+                                type="text"
+                                value={cs.ruleAccountFilter ?? ""}
+                                onChange={e => setCs(tx.id, { ruleAccountFilter: e.target.value || null })}
+                                placeholder={tx.account_mask ? `e.g. ${tx.account_mask}` : "any"}
+                                className="w-full border border-slate-300 rounded px-2 py-1 text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {/* Confirm button */}

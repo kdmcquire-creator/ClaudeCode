@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react"
 import Sidebar from "./components/Sidebar"
+import ErrorBoundary from "./components/ErrorBoundary"
 import Dashboard from "./screens/Dashboard"
 import ReviewQueue from "./screens/ReviewQueue"
 import Transactions from "./screens/Transactions"
@@ -70,6 +71,7 @@ export default function App() {
     }
 
     setTimeout(checkReady, 500)
+    return undefined
   }, [])
 
   if (!isReady) {
@@ -85,12 +87,12 @@ export default function App() {
   }
 
   const screens: Record<Screen, React.ReactNode> = {
-    dashboard: <Dashboard onNavigate={setScreen} />,
-    review: <ReviewQueue onPendingChange={setPendingCount} />,
-    transactions: <Transactions />,
-    reports: <Reports />,
-    investments: <Investments />,
-    settings: <Settings />,
+    dashboard: <ErrorBoundary fallbackLabel="Dashboard"><Dashboard onNavigate={setScreen} /></ErrorBoundary>,
+    review: <ErrorBoundary fallbackLabel="Review Queue"><ReviewQueue onPendingChange={setPendingCount} /></ErrorBoundary>,
+    transactions: <ErrorBoundary fallbackLabel="Transactions"><Transactions /></ErrorBoundary>,
+    reports: <ErrorBoundary fallbackLabel="Reports"><Reports /></ErrorBoundary>,
+    investments: <ErrorBoundary fallbackLabel="Investments"><Investments /></ErrorBoundary>,
+    settings: <ErrorBoundary fallbackLabel="Settings"><Settings /></ErrorBoundary>,
   }
 
   return (

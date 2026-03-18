@@ -36,7 +36,7 @@ export function normalizeMerchant(raw: string): string {
     .trim()
 }
 
-function ruleMatches(rule: Rule, tx: {
+export function ruleMatches(rule: Rule, tx: {
   merchantNorm: string
   accountMask: string
   amount: number
