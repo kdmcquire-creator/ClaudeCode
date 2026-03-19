@@ -363,6 +363,78 @@ function runMigrations(database: Database.Database): void {
 
     database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('006-backfill-source-row-hash')
   }
+
+  // Migration 007: rehash CSV-imported transactions to match Plaid hash format,
+  // then exclude any that collide with an existing Plaid record.
+  // This fixes the DoorDash (and similar) duplicate bug where CSV and Plaid
+  // produced different hashes for the same transaction.
+  if (!applied('007-csv-rehash-dedup')) {
+    const { createHash } = require('crypto')
+    const { normalizeMerchant: normMerch } = require('../electron/services/classification-engine')
+
+    // Find all CSV-imported transactions (have source_row_hash, no plaid_transaction_id)
+    const csvTxs = database.prepare(`
+      SELECT t.id, t.transaction_date, t.amount, t.merchant_name,
+             t.description_raw, a.account_mask, t.review_status
+      FROM transactions t
+      JOIN accounts a ON a.id = t.account_id
+      WHERE t.plaid_transaction_id IS NULL
+        AND t.source_row_hash IS NOT NULL
+        AND t.bucket != 'Exclude'
+        AND t.review_status != 'manually_classified'
+    `).all() as Array<{
+      id: string; transaction_date: string; amount: number;
+      merchant_name: string; description_raw: string;
+      account_mask: string; review_status: string
+    }>
+
+    let rehashed = 0
+    let deduped = 0
+    const updateHash = database.prepare('UPDATE transactions SET source_row_hash = ? WHERE id = ?')
+    const excludeTx = database.prepare(`
+      UPDATE transactions
+      SET bucket = 'Exclude', review_status = 'auto_classified',
+          flag_reason = 'CSV/Plaid duplicate (migration 007)',
+          updated_at = datetime('now')
+      WHERE id = ?
+    `)
+
+    const run = database.transaction(() => {
+      for (const tx of csvTxs) {
+        // Recompute hash using the Plaid-compatible format
+        const merchantNorm = normMerch(tx.description_raw || tx.merchant_name)
+        const newHash = createHash('sha256')
+          .update(JSON.stringify({
+            date: tx.transaction_date,
+            amount: tx.amount,
+            merchant: merchantNorm,
+            account_mask: tx.account_mask,
+          }))
+          .digest('hex')
+
+        // Check if a Plaid transaction already holds this hash
+        const plaidMatch = database.prepare(
+          'SELECT id FROM transactions WHERE source_row_hash = ? AND plaid_transaction_id IS NOT NULL'
+        ).get(newHash) as { id: string } | undefined
+
+        if (plaidMatch) {
+          // Plaid version exists → exclude the CSV copy
+          excludeTx.run(tx.id)
+          deduped++
+        } else {
+          // No collision — update hash to the normalized format
+          try { updateHash.run(newHash, tx.id); rehashed++ } catch { /* hash conflict — another CSV row already has this hash */ }
+        }
+      }
+    })
+    run()
+
+    if (rehashed > 0 || deduped > 0) {
+      console.log(`[Migration 007] Rehashed ${rehashed} CSV transactions, excluded ${deduped} duplicates`)
+    }
+
+    database.prepare("INSERT OR IGNORE INTO migrations (id) VALUES (?)").run('007-csv-rehash-dedup')
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
