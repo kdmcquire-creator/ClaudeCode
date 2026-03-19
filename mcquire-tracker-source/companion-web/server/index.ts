@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser'
 import path from 'path'
 import fs from 'fs'
 import crypto from 'crypto'
-import { getDb, closeDb } from './db.js'
+import { getDb, closeDb, initDb } from './db.js'
 import {
   reclassifyPendingAfterRuleChange,
   loadActiveRules,
@@ -237,12 +237,18 @@ if (fs.existsSync(distPath)) {
 
 // ── Start ───────────────────────────────────────────────────────────────────
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[companion-web] Running on http://0.0.0.0:${PORT}`)
-  console.log(`[companion-web] PIN auth enabled`)
-  // Eagerly connect to DB to fail fast
-  try { getDb() } catch (err: any) { console.error('[companion-web]', err.message) }
-})
+// Initialize DB (async for sql.js) then start server
+initDb()
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[companion-web] Running on http://0.0.0.0:${PORT}`)
+      console.log(`[companion-web] PIN auth enabled`)
+    })
+  })
+  .catch((err: any) => {
+    console.error('[companion-web] Failed to start:', err.message)
+    process.exit(1)
+  })
 
 process.on('SIGINT', () => { closeDb(); process.exit(0) })
 process.on('SIGTERM', () => { closeDb(); process.exit(0) })
