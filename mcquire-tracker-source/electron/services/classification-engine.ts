@@ -36,7 +36,7 @@ export function normalizeMerchant(raw: string): string {
     .trim()
 }
 
-function ruleMatches(rule: Rule, tx: {
+export function ruleMatches(rule: Rule, tx: {
   merchantNorm: string
   accountMask: string
   amount: number
@@ -59,7 +59,7 @@ function ruleMatches(rule: Rule, tx: {
     // Normal matching
     switch (rule.match_type) {
       case 'exact':
-        if (tx.merchantNorm !== mv && !tx.originalDescription?.toLowerCase().includes(mv)) return false
+        if (tx.merchantNorm !== mv) return false
         break
       case 'contains':
         if (!tx.merchantNorm.includes(mv) && !tx.originalDescription?.toLowerCase().includes(mv)) return false
@@ -68,7 +68,14 @@ function ruleMatches(rule: Rule, tx: {
         if (!tx.merchantNorm.startsWith(mv)) return false
         break
       case 'regex':
-        if (!new RegExp(mv, 'i').test(tx.merchantNorm)) return false
+        try {
+          // Guard against catastrophic backtracking: reject patterns with nested quantifiers
+          if (/(\+|\*|\?)\{?\d*,?\d*\}?\)*(\+|\*|\?)/.test(mv)) return false
+          if (!new RegExp(mv, 'i').test(tx.merchantNorm)) return false
+        } catch {
+          // Invalid regex — treat as no match
+          return false
+        }
         break
     }
   }
@@ -93,11 +100,27 @@ function ruleMatches(rule: Rule, tx: {
   return true
 }
 
-function isPersonalTripDate(db: Database.Database, date: string): boolean {
-  const trips = db.prepare('SELECT * FROM personal_trip_dates').all() as {
+// Cache personal trip dates to avoid querying DB on every conditional restaurant check
+let _tripDateCache: { start_date: string; end_date: string }[] | null = null
+let _tripDateCacheDb: Database.Database | null = null
+
+function getPersonalTripDates(db: Database.Database): { start_date: string; end_date: string }[] {
+  if (_tripDateCache && _tripDateCacheDb === db) return _tripDateCache
+  _tripDateCache = db.prepare('SELECT start_date, end_date FROM personal_trip_dates').all() as {
     start_date: string; end_date: string
   }[]
-  return trips.some(t => date >= t.start_date && date <= t.end_date)
+  _tripDateCacheDb = db
+  return _tripDateCache
+}
+
+/** Call after modifying personal_trip_dates to refresh the cache. */
+export function invalidateTripDateCache(): void {
+  _tripDateCache = null
+  _tripDateCacheDb = null
+}
+
+function isPersonalTripDate(db: Database.Database, date: string): boolean {
+  return getPersonalTripDates(db).some(t => date >= t.start_date && date <= t.end_date)
 }
 
 export function classifyTransaction(

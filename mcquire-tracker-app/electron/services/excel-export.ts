@@ -52,6 +52,7 @@ export async function generatePeak10ExpenseReport(
       AND t.transaction_date > ?
       AND t.review_status IN ('auto_classified','manually_classified')
       AND t.expense_report_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM transactions _sp WHERE _sp.split_parent_id = t.id)
     ORDER BY t.transaction_date ASC
   `).all(dateFrom, dateTo, cutoff) as Transaction[]
 
@@ -160,7 +161,8 @@ export async function generateFullTrackerExport(db: Database.Database, outputPat
   const allTxs = db.prepare(`
     SELECT t.*, a.account_name, a.account_mask, a.institution
     FROM transactions t JOIN accounts a ON a.id = t.account_id
-    WHERE t.bucket != 'Exclude' OR t.bucket IS NULL
+    WHERE (t.bucket != 'Exclude' OR t.bucket IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM transactions _sp WHERE _sp.split_parent_id = t.id)
     ORDER BY t.transaction_date DESC
   `).all() as Transaction[]
 
@@ -192,7 +194,7 @@ export async function generateFullTrackerExport(db: Database.Database, outputPat
   wsAll.columns.forEach(col => { col.width = 18 })
 
   // Peak 10 tab
-  const p10Txs = db.prepare("SELECT t.*, a.account_name FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.bucket='Peak 10' ORDER BY t.transaction_date").all() as Transaction[]
+  const p10Txs = db.prepare("SELECT t.*, a.account_name FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.bucket='Peak 10' AND NOT EXISTS (SELECT 1 FROM transactions _sp WHERE _sp.split_parent_id = t.id) ORDER BY t.transaction_date").all() as Transaction[]
   const p10Headers = ['Date','Entity','Account/Category','Merchant','Description/Notes','Amount','Name','Title']
   const p10HRow = wsPeak10.getRow(1)
   p10Headers.forEach((h, i) => { p10HRow.getCell(i+1).value = h })
@@ -206,7 +208,7 @@ export async function generateFullTrackerExport(db: Database.Database, outputPat
   wsPeak10.columns.forEach(col => { col.width = 20 })
 
   // LLC tab
-  const llcTxs = db.prepare("SELECT t.*, a.account_name FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.bucket='Moonsmoke LLC' ORDER BY t.transaction_date").all() as Transaction[]
+  const llcTxs = db.prepare("SELECT t.*, a.account_name FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.bucket='Moonsmoke LLC' AND NOT EXISTS (SELECT 1 FROM transactions _sp WHERE _sp.split_parent_id = t.id) ORDER BY t.transaction_date").all() as Transaction[]
   const llcHeaders = ['Date','Account','Merchant','Description','Category','Amount','Period Label']
   const llcHRow = wsLLC.getRow(1)
   llcHeaders.forEach((h,i) => { llcHRow.getCell(i+1).value = h })

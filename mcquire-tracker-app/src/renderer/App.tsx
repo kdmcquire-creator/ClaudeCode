@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react"
 import Sidebar from "./components/Sidebar"
+import ErrorBoundary from "./components/ErrorBoundary"
 import Dashboard from "./screens/Dashboard"
 import ReviewQueue from "./screens/ReviewQueue"
 import Transactions from "./screens/Transactions"
@@ -40,6 +41,24 @@ export default function App() {
       }
     } catch {}
 
+    // Auto-refresh pending count after sync completes or import finishes
+    try {
+      const ipc = (window as any).electron?.ipcRenderer
+      const refreshCount = () => {
+        window.api?.db?.getReviewCount?.().then((res: any) => {
+          const count = res?.data ?? res ?? 0
+          if (typeof count === 'number') setPendingCount(count)
+        }).catch(() => {})
+      }
+      ipc?.on('event:sync-completed', refreshCount)
+      ipc?.on('import:watched-folder-complete', refreshCount)
+      // Also refresh periodically (every 30s) to catch changes from other screens
+      const interval = setInterval(refreshCount, 30000)
+      // Initial load
+      refreshCount()
+      return () => clearInterval(interval)
+    } catch {}
+
     // Fallback: check sync folder to determine first run
     const checkReady = async () => {
       try {
@@ -52,6 +71,7 @@ export default function App() {
     }
 
     setTimeout(checkReady, 500)
+    return undefined
   }, [])
 
   if (!isReady) {
@@ -67,12 +87,12 @@ export default function App() {
   }
 
   const screens: Record<Screen, React.ReactNode> = {
-    dashboard: <Dashboard onNavigate={setScreen} />,
-    review: <ReviewQueue onPendingChange={setPendingCount} />,
-    transactions: <Transactions />,
-    reports: <Reports />,
-    investments: <Investments />,
-    settings: <Settings />,
+    dashboard: <ErrorBoundary fallbackLabel="Dashboard"><Dashboard onNavigate={setScreen} /></ErrorBoundary>,
+    review: <ErrorBoundary fallbackLabel="Review Queue"><ReviewQueue onPendingChange={setPendingCount} /></ErrorBoundary>,
+    transactions: <ErrorBoundary fallbackLabel="Transactions"><Transactions /></ErrorBoundary>,
+    reports: <ErrorBoundary fallbackLabel="Reports"><Reports /></ErrorBoundary>,
+    investments: <ErrorBoundary fallbackLabel="Investments"><Investments /></ErrorBoundary>,
+    settings: <ErrorBoundary fallbackLabel="Settings"><Settings /></ErrorBoundary>,
   }
 
   return (
@@ -154,6 +174,13 @@ declare global {
         testEmail: (email: string) => Promise<any>
         getAll: () => Promise<any>
         set: (key: string, value: string) => Promise<any>
+      }
+      claude: {
+        hasKey: () => Promise<any>
+        saveKey: (apiKey: string) => Promise<any>
+        deleteKey: () => Promise<any>
+        suggest: (tx: any) => Promise<any>
+        suggestBatch: (transactions: any[]) => Promise<any>
       }
     }
   }

@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react"
 
-type Tab = "accounts" | "rules" | "sync" | "notifications"
+type Tab = "accounts" | "rules" | "sync" | "notifications" | "trips" | "ai"
 
-const RULE_SECTIONS = ["llc_always", "p10_always", "p10_conditional", "personal_override", "special", "ask_kyle"]
+const RULE_SECTIONS = ["exclusion", "llc_always", "p10_always", "p10_conditional", "personal_override", "special", "ask_kyle"]
 const RULE_ACTIONS = ["classify", "ask_kyle", "exclude", "split_flag"]
 const MATCH_TYPES = ["contains", "exact", "starts_with", "regex"]
 const BUCKETS = ["Peak 10", "Moonsmoke LLC", "Personal", "Watersound Investments LLC", "Exclude"]
@@ -19,6 +19,7 @@ const LLC_CATEGORIES = [
 ]
 
 const sectionColor: Record<string, string> = {
+  exclusion: "bg-red-100 text-red-700",
   llc_always: "bg-green-100 text-green-700",
   p10_always: "bg-blue-100 text-blue-700",
   p10_conditional: "bg-sky-100 text-sky-700",
@@ -33,17 +34,19 @@ export default function Settings() {
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-slate-800 mb-5">Settings</h1>
       <div className="flex border-b border-slate-200 mb-6 gap-1">
-        {(["accounts", "rules", "sync", "notifications"] as Tab[]).map(t => (
+        {(["accounts", "rules", "trips", "sync", "notifications", "ai"] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${tab === t ? "bg-white border border-b-white border-slate-200 text-blue-600 -mb-px" : "text-slate-500 hover:text-slate-700"}`}>
-            {t === "accounts" ? "Account Management" : t === "rules" ? "Rule Editor" : t === "sync" ? "Sync & Schedule" : "Notifications"}
+            {t === "accounts" ? "Account Management" : t === "rules" ? "Rule Editor" : t === "trips" ? "Personal Trips" : t === "sync" ? "Sync & Schedule" : t === "ai" ? "AI Classification" : "Notifications"}
           </button>
         ))}
       </div>
       {tab === "accounts" && <AccountsTab />}
       {tab === "rules" && <RulesTab />}
+      {tab === "trips" && <TripsTab />}
       {tab === "sync" && <SyncTab />}
       {tab === "notifications" && <NotificationsTab />}
+      {tab === "ai" && <AiClassificationTab />}
     </div>
   )
 }
@@ -420,8 +423,8 @@ function RulesTab() {
             {trips.length === 0 && <p className="text-sm text-blue-600">No trips. NYC Trip (Nov 24–28, 2025) should be seeded at init.</p>}
             {trips.map((t: any) => (
               <div key={t.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-sm">
-                <span className="font-medium text-slate-700">{t.name}</span>
-                <span className="text-slate-500">{t.start} → {t.end}</span>
+                <span className="font-medium text-slate-700">{t.trip_name}</span>
+                <span className="text-slate-500">{t.start_date} → {t.end_date}</span>
                 <button onClick={async () => { try { await window.api.trips.delete(t.id) } catch {}; load() }} className="text-red-400 hover:text-red-600 text-xs">Delete</button>
               </div>
             ))}
@@ -438,7 +441,7 @@ function RulesTab() {
             ))}
             <button onClick={async () => {
               if (!tripForm.name || !tripForm.start || !tripForm.end) { alert("Fill all fields"); return }
-              try { await window.api.trips.save(tripForm) } catch {}
+              try { await window.api.trips.save({ trip_name: tripForm.name, start_date: tripForm.start, end_date: tripForm.end }) } catch {}
               setTripForm({ name: "", start: "", end: "" }); load()
             }} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">Add</button>
           </div>
@@ -507,6 +510,122 @@ function RulesTab() {
               <button onClick={() => setEditRule(null)} className="flex-1 py-2 border border-slate-300 rounded-lg text-sm">Cancel</button>
               <button onClick={saveRule} disabled={saving} className="flex-1 py-2 bg-slate-800 text-white rounded-lg text-sm disabled:opacity-50">{saving ? "Saving..." : "Save Rule"}</button>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Trips Tab ──────────────────────────────────────────────────────────────────
+// Manages personal trip exclusion dates used by the Mon-Thu conditional restaurant rule.
+// During these date ranges, restaurant charges are classified as Personal instead of Peak 10.
+function TripsTab() {
+  const [trips, setTrips] = useState<Array<{ id: string; trip_name: string; start_date: string; end_date: string }>>([])
+  const [editing, setEditing] = useState<{ id?: string; trip_name: string; start_date: string; end_date: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    const res = await (window as any).api.trips.getAll()
+    if (res.success) setTrips(res.data)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSave = async () => {
+    if (!editing || !editing.trip_name || !editing.start_date || !editing.end_date) return
+    try {
+      await (window as any).api.trips.save(editing)
+      setEditing(null)
+      load()
+    } catch (e: any) {
+      alert("Failed to save trip: " + (e?.message ?? "unknown error"))
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this trip exclusion?")) return
+    try {
+      await (window as any).api.trips.delete(id)
+      load()
+    } catch (e: any) {
+      alert("Failed to delete trip: " + (e?.message ?? "unknown error"))
+    }
+  }
+
+  if (loading) return <p className="text-slate-400 text-sm">Loading trips…</p>
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Personal Trip Exclusion Dates</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            During these date ranges, restaurant charges on weekdays are classified as <strong>Personal</strong> instead of Peak 10 business meals.
+            This prevents the Mon–Thu conditional restaurant rule from auto-classifying meals on personal vacations.
+          </p>
+        </div>
+        <button onClick={() => setEditing({ trip_name: "", start_date: "", end_date: "" })}
+          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 whitespace-nowrap">
+          + Add Trip
+        </button>
+      </div>
+
+      {trips.length === 0 && !editing && (
+        <p className="text-slate-400 text-sm py-8 text-center">No personal trip dates configured. Click "Add Trip" to create one.</p>
+      )}
+
+      {trips.map(trip => (
+        <div key={trip.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-4 mb-3">
+          <div>
+            <span className="font-medium text-slate-800">{trip.trip_name}</span>
+            <span className="text-slate-500 text-sm ml-3">{trip.start_date} – {trip.end_date}</span>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setEditing(trip)}
+              className="text-sm text-blue-600 hover:text-blue-800">Edit</button>
+            <button onClick={() => handleDelete(trip.id)}
+              className="text-sm text-red-500 hover:text-red-700">Delete</button>
+          </div>
+        </div>
+      ))}
+
+      {editing && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+          <h3 className="text-sm font-semibold text-blue-800 mb-3">
+            {editing.id ? "Edit Trip" : "New Trip Exclusion"}
+          </h3>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs text-slate-500">Trip Name</label>
+              <input type="text" value={editing.trip_name} placeholder="e.g., NYC Thanksgiving 2025"
+                onChange={e => setEditing({ ...editing, trip_name: e.target.value })}
+                className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Start Date</label>
+              <input type="date" value={editing.start_date}
+                onChange={e => setEditing({ ...editing, start_date: e.target.value })}
+                className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">End Date</label>
+              <input type="date" value={editing.end_date}
+                onChange={e => setEditing({ ...editing, end_date: e.target.value })}
+                className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm" />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={handleSave}
+              disabled={!editing.trip_name || !editing.start_date || !editing.end_date}
+              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-40">
+              Save
+            </button>
+            <button onClick={() => setEditing(null)}
+              className="px-4 py-1.5 text-slate-600 text-sm hover:text-slate-800">
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -741,6 +860,128 @@ function NotificationsTab() {
       <div className="flex gap-3">
         <button onClick={save} disabled={saving} className="flex-1 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-900 disabled:opacity-50">{saving ? "Saving..." : "Save Settings"}</button>
         <button onClick={sendTest} disabled={testing} className="px-5 py-2.5 border border-slate-300 rounded-lg text-sm hover:bg-slate-50 disabled:opacity-50">{testing ? "Sending..." : "Send Test Email"}</button>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Classification Tab — Claude API key management
+// ─────────────────────────────────────────────────────────────────────────────
+function AiClassificationTab() {
+  const [hasKey, setHasKey] = useState(false)
+  const [apiKey, setApiKey] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    window.api.claude?.hasKey?.().then((res: any) => {
+      setHasKey(res?.data === true)
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  const saveKey = async () => {
+    if (!apiKey.trim()) return
+    setSaving(true)
+    setStatus(null)
+    try {
+      const res = await window.api.claude.saveKey(apiKey.trim())
+      if (res?.success) {
+        setHasKey(true)
+        setApiKey("")
+        setStatus("API key saved successfully. AI suggestions are now enabled in the Review Queue.")
+      } else {
+        setStatus("Failed to save: " + (res?.error ?? "unknown error"))
+      }
+    } catch (e: any) {
+      setStatus("Error: " + (e?.message ?? "unknown"))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeKey = async () => {
+    if (!confirm("Remove Claude API key? AI suggestions will be disabled.")) return
+    await window.api.claude.deleteKey()
+    setHasKey(false)
+    setStatus("API key removed. AI suggestions are disabled.")
+  }
+
+  if (loading) return <div className="text-sm text-slate-500">Loading...</div>
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-800 mb-1">AI-Powered Classification</h2>
+        <p className="text-sm text-slate-500">
+          Uses Claude (Haiku) to suggest bucket and category for unclassified transactions.
+          Suggestions appear in the Review Queue with a one-click apply button.
+        </p>
+      </div>
+
+      <div className={`rounded-lg p-4 border ${hasKey ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'}`}>
+        <div className="flex items-center gap-2 mb-2">
+          <div className={`w-2 h-2 rounded-full ${hasKey ? 'bg-green-500' : 'bg-slate-400'}`} />
+          <span className="text-sm font-medium text-slate-700">
+            {hasKey ? "Claude API key configured" : "No API key configured"}
+          </span>
+        </div>
+        <p className="text-xs text-slate-500">
+          {hasKey
+            ? "AI suggestions are active. Your key is stored encrypted via Windows Credential Manager."
+            : "Add your Anthropic API key to enable AI classification suggestions."}
+        </p>
+      </div>
+
+      {!hasKey && (
+        <div className="space-y-3">
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide block">Anthropic API Key</label>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            placeholder="sk-ant-api03-..."
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono"
+          />
+          <p className="text-xs text-slate-400">
+            Get your API key from console.anthropic.com. Uses Claude Haiku — costs ~$0.001 per suggestion.
+          </p>
+          <button
+            onClick={saveKey}
+            disabled={saving || !apiKey.trim()}
+            className="px-5 py-2.5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save API Key"}
+          </button>
+        </div>
+      )}
+
+      {hasKey && (
+        <button
+          onClick={removeKey}
+          className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50"
+        >
+          Remove API Key
+        </button>
+      )}
+
+      {status && (
+        <div className={`text-sm p-3 rounded-lg ${status.includes('Error') || status.includes('Failed') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+          {status}
+        </div>
+      )}
+
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-slate-700 mb-2">How it works</h3>
+        <ul className="text-xs text-slate-500 space-y-1 list-disc list-inside">
+          <li>When you expand a transaction in the Review Queue, click "Ask AI for suggestion"</li>
+          <li>Or use "AI Suggest (10)" to get suggestions for the first 10 visible transactions</li>
+          <li>Claude analyzes the merchant, amount, date, and your recent classification history</li>
+          <li>Click "Apply" to pre-fill the bucket and category, then confirm as usual</li>
+          <li>High-confidence suggestions ({">"}70%) are highlighted in purple; lower ones in amber</li>
+          <li>Creating a rule after accepting a suggestion prevents future AI calls for that merchant</li>
+        </ul>
       </div>
     </div>
   )
