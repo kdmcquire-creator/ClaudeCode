@@ -4,12 +4,13 @@ import path from 'path'
 import fs from 'fs'
 import crypto from 'crypto'
 import { getDb, closeDb, initDb } from './db.js'
-import {
-  reclassifyPendingAfterRuleChange,
-  loadActiveRules,
-  classifyTransaction,
-  normalizeMerchant,
-} from '../../electron/services/classification-engine'
+// Dynamic import to handle CJS/ESM interop (classification-engine lives outside
+// companion-web's "type":"module" boundary)
+const classificationEngine = await import('../../electron/services/classification-engine')
+const reclassifyPendingAfterRuleChange = classificationEngine.reclassifyPendingAfterRuleChange ?? (classificationEngine as any).default?.reclassifyPendingAfterRuleChange
+const loadActiveRules = classificationEngine.loadActiveRules ?? (classificationEngine as any).default?.loadActiveRules
+const classifyTransaction = classificationEngine.classifyTransaction ?? (classificationEngine as any).default?.classifyTransaction
+const normalizeMerchant = classificationEngine.normalizeMerchant ?? (classificationEngine as any).default?.normalizeMerchant
 
 // Load .env manually (avoid extra dependency)
 const envPath = path.join(import.meta.dirname, '..', '.env')
