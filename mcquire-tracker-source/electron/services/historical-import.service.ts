@@ -15,6 +15,7 @@ import * as crypto from 'crypto'
 import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
 import { ipcMain, dialog } from 'electron'
+import { normalizeMerchant, hashRow } from './classification-engine'
 
 // ─── Monarch CSV column mapping ───────────────────────────────────────────────
 // Monarch export columns: Date, Merchant, Category, Account, Original Statement,
@@ -261,7 +262,14 @@ export class HistoricalImportService {
           continue
         }
 
-        const hash = this.rowHash(row, format)
+        // Resolve account FIRST so we can include account_mask in the hash
+        // (must match the Plaid import path's hash format for cross-source dedup)
+        const accountName = accountCol ? (row[accountCol] || '') : 'Apple Card'
+        const accountResult = this.findOrCreateAccount(accountName)
+        if (!accountResult) continue
+        const { id: accountId, mask: accountMask } = accountResult
+
+        const hash = this.rowHash(row, format, accountMask)
         const exists = this.db
           .prepare('SELECT id FROM transactions WHERE source_row_hash = ?')
           .get(hash)
@@ -269,11 +277,6 @@ export class HistoricalImportService {
           progress.duplicates++
           continue
         }
-
-        const accountName = accountCol ? (row[accountCol] || '') : 'Apple Card'
-        const accountResult = this.findOrCreateAccount(accountName)
-        if (!accountResult) continue
-        const { id: accountId, mask: accountMask } = accountResult
 
         const amount = this.parseAmount(row[amountCol] || '0')
         const merchantName = this.cleanMerchant(
@@ -335,15 +338,54 @@ export class HistoricalImportService {
 
   // ─── Helper methods ───────────────────────────────────────────────────────────
 
-  private rowHash(row: Record<string, string>, format?: string): string {
-    let key: string
+  /**
+   * Compute a dedup hash that matches the Plaid import path.
+   * Uses the same hashRow() format: JSON.stringify({date, amount, merchant, account_mask})
+   * where merchant is normalized and account_mask is the 4-digit mask (not CSV account name).
+   *
+   * Falls back to a legacy pipe-delimited hash when account_mask isn't available
+   * (e.g., during preview before account resolution).
+   */
+  private rowHash(row: Record<string, string>, format?: string, accountMask?: string): string {
+    let date: string
+    let merchant: string
+    let amount: string
+
     if (format === 'apple_card') {
-      key = `${row['Transaction Date']}|${row['Merchant']}|${row['Amount (USD)']}`
+      date = row['Transaction Date'] || ''
+      merchant = row['Merchant'] || ''
+      amount = row['Amount (USD)'] || ''
     } else if (format === 'usaa') {
-      key = `${row['Date']}|${row['Description']}|${row['Amount']}`
+      date = row['Date'] || ''
+      merchant = row['Description'] || ''
+      amount = row['Amount'] || ''
     } else {
-      key = `${row['Date']}|${row['Merchant']}|${row['Amount']}|${row['Account']}`
+      date = row['Date'] || ''
+      merchant = row['Merchant'] || ''
+      amount = row['Amount'] || ''
     }
+
+    // Normalize merchant the same way Plaid does
+    const merchantNorm = normalizeMerchant(merchant)
+
+    // Parse amount to a number the same way Plaid stores it (positive = expense)
+    const amountNum = -(parseFloat(amount.replace(/[$,\s]/g, '')) || 0)
+
+    // Normalize date to YYYY-MM-DD
+    let dateNorm = date
+    if (date.includes('/')) {
+      const [month, day, year] = date.split('/')
+      dateNorm = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+    }
+
+    if (accountMask) {
+      // Match Plaid's hashRow format exactly
+      return hashRow({ date: dateNorm, amount: amountNum, merchant: merchantNorm, account_mask: accountMask })
+    }
+
+    // Fallback for preview (no account resolved yet) — use legacy format
+    const accountCol = format === 'apple_card' ? '' : (row['Account'] || '')
+    const key = `${dateNorm}|${merchantNorm}|${amountNum}|${accountCol}`
     return crypto.createHash('sha256').update(key).digest('hex')
   }
 
