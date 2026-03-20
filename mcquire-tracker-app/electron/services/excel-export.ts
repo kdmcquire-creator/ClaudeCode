@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import type { Transaction } from '../../src/shared/types'
 
 const NAVY = '1F3864'
@@ -33,7 +33,7 @@ function dataRow(row: ExcelJS.Row, isEven: boolean) {
 
 // ── Peak 10 Expense Report ─────────────────────────────────────────────
 export async function generatePeak10ExpenseReport(
-  db: Database.Database,
+  db: CompatDb,
   dateFrom: string,
   dateTo: string,
   periodLabel: string,
@@ -146,7 +146,7 @@ export async function generatePeak10ExpenseReport(
 }
 
 // ── Full Tracker Export (9-tab workbook) ──────────────────────────────
-export async function generateFullTrackerExport(db: Database.Database, outputPath: string): Promise<void> {
+export async function generateFullTrackerExport(db: CompatDb, outputPath: string): Promise<void> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'McQuire Tracker'
 
@@ -253,7 +253,7 @@ export async function generateFullTrackerExport(db: Database.Database, outputPat
 }
 
 // ── Validate export readiness ──────────────────────────────────────────
-export function validateExpenseReportReadiness(db: Database.Database, dateFrom: string, dateTo: string): { valid: boolean; blocking: string[]; warnings: string[] } {
+export function validateExpenseReportReadiness(db: CompatDb, dateFrom: string, dateTo: string): { valid: boolean; blocking: string[]; warnings: string[] } {
   const blocking: string[] = []
   const warnings: string[] = []
 

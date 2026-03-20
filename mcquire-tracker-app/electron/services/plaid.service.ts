@@ -12,7 +12,7 @@
 
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid'
 import { safeStorage, app } from 'electron'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import { v4 as uuidv4 } from 'uuid'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -59,14 +59,14 @@ function deleteCredential(key: string): void {
 
 export class PlaidService {
   private static instance: PlaidService | null = null
-  private db: Database.Database
+  private db: CompatDb
   private client: PlaidApi | null = null
 
-  private constructor(db: Database.Database) {
+  private constructor(db: CompatDb) {
     this.db = db
   }
 
-  static getInstance(db: Database.Database): PlaidService {
+  static getInstance(db: CompatDb): PlaidService {
     if (!PlaidService.instance) {
       PlaidService.instance = new PlaidService(db)
     }
