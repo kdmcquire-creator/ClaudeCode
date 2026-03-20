@@ -3,20 +3,18 @@
 
 import * as path from 'path'
 import * as fs from 'fs'
-import Database from 'better-sqlite3'
+import { initSqlJsDatabase, type CompatDb } from '../../electron/services/database'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Database initialization
-// Creates all tables, sets WAL mode, seeds classification rules on first run.
+// Creates all tables, sets pragmas, seeds classification rules on first run.
 // ─────────────────────────────────────────────────────────────────────────────
-export function initDatabase(folder: string): Database.Database {
+export async function initDatabase(folder: string): Promise<CompatDb> {
   const dbDir = path.join(folder, 'db')
   fs.mkdirSync(dbDir, { recursive: true })
   const dbPath = path.join(dbDir, 'mcquire.db')
 
-  const database = new Database(dbPath)
-  database.pragma('journal_mode = WAL')
-  database.pragma('foreign_keys = ON')
+  const database = await initSqlJsDatabase(dbPath)
 
   database.exec(`
     -- Accounts
@@ -224,7 +222,7 @@ export function initDatabase(folder: string): Database.Database {
 // ─────────────────────────────────────────────────────────────────────────────
 // One-time migrations — safe to run on every startup (INSERT OR IGNORE guards)
 // ─────────────────────────────────────────────────────────────────────────────
-function runMigrations(database: Database.Database): void {
+function runMigrations(database: CompatDb): void {
   const applied = (id: string) =>
     !!database.prepare('SELECT id FROM migrations WHERE id = ?').get(id)
 
@@ -441,7 +439,7 @@ function runMigrations(database: Database.Database): void {
 // Seed classification rules (all rules from the workflow document)
 // Uses INSERT OR IGNORE so re-runs are safe.
 // ─────────────────────────────────────────────────────────────────────────────
-function seedClassificationRules(database: Database.Database): void {
+function seedClassificationRules(database: CompatDb): void {
   const insert = database.prepare(`
     INSERT OR IGNORE INTO rules
       (id, rule_name, section, match_type, match_value, account_mask_filter,

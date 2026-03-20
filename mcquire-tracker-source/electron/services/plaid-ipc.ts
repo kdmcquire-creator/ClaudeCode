@@ -6,7 +6,7 @@
 // Call registerPlaidIpcHandlers(ipcMain, db, plaid, scheduler) once during app init.
 
 import { ipcMain } from 'electron'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import { PlaidService } from './plaid.service'
 import { openPlaidLink } from './plaid-link.service'
 import { SyncScheduler } from './sync-scheduler.service'
@@ -14,7 +14,7 @@ import { IPC } from '../../src/shared/plaid.types'
 import { reclassifyPendingAfterRuleChange } from './classification-engine'
 
 export function registerPlaidIpcHandlers(
-  db: Database.Database,
+  db: CompatDb,
   plaid: PlaidService,
   scheduler: SyncScheduler
 ): void {
