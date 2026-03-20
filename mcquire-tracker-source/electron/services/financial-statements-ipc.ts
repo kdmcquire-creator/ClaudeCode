@@ -5,7 +5,7 @@
 
 import { ipcMain, shell } from 'electron'
 import * as fs from 'fs'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import { FinancialStatementsService } from './financial-statements.service'
 import {
   generatePeak10ExpenseReport,
@@ -14,7 +14,7 @@ import {
 import * as path from 'path'
 
 export function registerFinancialStatementsHandlers(
-  db: Database.Database,
+  db: CompatDb,
   getSyncFolder: () => string
 ): void {
   const svc = FinancialStatementsService.getInstance(db)

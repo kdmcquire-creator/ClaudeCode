@@ -7,7 +7,7 @@
 // - Sends email notifications on new pending transactions or errors
 
 import * as cron from 'node-cron'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import { BrowserWindow } from 'electron'
 import { PlaidService } from './plaid.service'
 import type { SyncResult } from '../../src/shared/plaid.types'
@@ -17,14 +17,14 @@ const STALE_THRESHOLD_HOURS = 12
 
 export class SyncScheduler {
   private static instance: SyncScheduler | null = null
-  private db: Database.Database
+  private db: CompatDb
   private plaid: PlaidService
   private cronJob: cron.ScheduledTask | null = null
   private isSyncing = false
   private getMainWindow: () => BrowserWindow | null
 
   private constructor(
-    db: Database.Database,
+    db: CompatDb,
     plaid: PlaidService,
     getMainWindow: () => BrowserWindow | null
   ) {
@@ -34,7 +34,7 @@ export class SyncScheduler {
   }
 
   static getInstance(
-    db: Database.Database,
+    db: CompatDb,
     plaid: PlaidService,
     getMainWindow: () => BrowserWindow | null
   ): SyncScheduler {

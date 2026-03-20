@@ -16,7 +16,7 @@
 import * as ExcelJS from 'exceljs'
 import * as path from 'path'
 import * as fs from 'fs'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 
 // ─── Colors matching the workbook ────────────────────────────────────────────
 const NAVY      = '1F3864'
@@ -64,13 +64,13 @@ function topBorder(row: ExcelJS.Row) {
 
 export class FinancialStatementsService {
   private static instance: FinancialStatementsService | null = null
-  private db: Database.Database
+  private db: CompatDb
 
-  private constructor(db: Database.Database) {
+  private constructor(db: CompatDb) {
     this.db = db
   }
 
-  static getInstance(db: Database.Database): FinancialStatementsService {
+  static getInstance(db: CompatDb): FinancialStatementsService {
     if (!FinancialStatementsService.instance) {
       FinancialStatementsService.instance = new FinancialStatementsService(db)
     }
@@ -891,7 +891,7 @@ export class FinancialStatementsService {
          AND ${NOT_SPLIT_PARENT}
          GROUP BY period`
       )
-      .all(exact ? category : undefined) as Array<{ period: string; total: number }>
+      .all(...(exact ? [category] : [])) as Array<{ period: string; total: number }>
 
     const result: Record<string, number> = {}
     for (const r of rows) result[r.period] = r.total

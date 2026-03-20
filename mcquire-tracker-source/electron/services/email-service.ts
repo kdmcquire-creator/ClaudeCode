@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer'
 import { safeStorage, app } from 'electron'
-import type Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import fs from 'fs'
 import path from 'path'
 
@@ -58,9 +58,9 @@ export class EmailService {
   // db is accepted to match the call signature in SyncScheduler but is not needed
   // for the current send implementation (SMTP config is stored in smtp.enc)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private constructor(_db: Database.Database) {}
+  private constructor(_db: CompatDb) {}
 
-  static getInstance(db: Database.Database): EmailService {
+  static getInstance(db: CompatDb): EmailService {
     if (!EmailService.instance) {
       EmailService.instance = new EmailService(db)
     }

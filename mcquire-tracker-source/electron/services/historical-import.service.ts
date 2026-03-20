@@ -12,7 +12,7 @@
 import * as Papa from 'papaparse'
 import * as fs from 'fs'
 import * as crypto from 'crypto'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import { v4 as uuidv4 } from 'uuid'
 import { ipcMain, dialog } from 'electron'
 import { normalizeMerchant, hashRow } from './classification-engine'
@@ -66,13 +66,13 @@ export interface ImportProgress {
 
 export class HistoricalImportService {
   private static instance: HistoricalImportService | null = null
-  private db: Database.Database
+  private db: CompatDb
 
-  private constructor(db: Database.Database) {
+  private constructor(db: CompatDb) {
     this.db = db
   }
 
-  static getInstance(db: Database.Database): HistoricalImportService {
+  static getInstance(db: CompatDb): HistoricalImportService {
     if (!HistoricalImportService.instance) {
       HistoricalImportService.instance = new HistoricalImportService(db)
     }
@@ -460,7 +460,7 @@ export class HistoricalImportService {
 // ─── IPC registration ─────────────────────────────────────────────────────────
 
 export function registerHistoricalImportHandlers(
-  db: Database.Database,
+  db: CompatDb,
   getMainWindow: () => Electron.BrowserWindow | null
 ): void {
   const service = HistoricalImportService.getInstance(db)

@@ -3,12 +3,12 @@
 
 import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import * as path from 'path'
-import Database from 'better-sqlite3'
+import type { CompatDb } from '../../electron/services/database'
 import { reclassifyPendingAfterRuleChange, invalidateTripDateCache } from '../../electron/services/classification-engine'
 import { saveClaudeApiKey, hasClaudeApiKey, deleteClaudeApiKey, suggestClassification, suggestBatch } from '../../electron/services/claude-classifier'
 
 interface AppState {
-  db: () => Database.Database | null
+  db: () => CompatDb | null
   mainWindow: () => BrowserWindow | null
   syncFolderPath: () => string
   setSyncFolderPath: (folder: string) => void

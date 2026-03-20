@@ -4,14 +4,14 @@
 // Register by calling registerInvestmentsIpcHandlers(db, invService) in main process.
 
 import { ipcMain } from 'electron'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import * as path from 'path'
 import * as ExcelJS from 'exceljs'
 import { PlaidInvestmentsService } from './plaid-investments.service'
 import { INVESTMENT_IPC } from '../../src/shared/investments.types'
 
 export function registerInvestmentsIpcHandlers(
-  db: Database.Database,
+  db: CompatDb,
   invService: PlaidInvestmentsService,
   getSyncFolder: () => string
 ): void {
@@ -141,7 +141,7 @@ export function registerInvestmentsIpcHandlers(
 // ─── Portfolio Excel generation ───────────────────────────────────────────────
 
 async function generatePortfolioExcel(
-  _db: Database.Database,
+  _db: CompatDb,
   invService: PlaidInvestmentsService,
   syncFolder: string
 ): Promise<string> {

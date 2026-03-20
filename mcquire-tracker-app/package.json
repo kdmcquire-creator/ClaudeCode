@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
-    "better-sqlite3": "^9.4.3",
+    "sql.js": "^1.11.0",
     "chokidar": "^3.6.0",
     "electron-updater": "^6.1.7",
     "exceljs": "^4.4.0",
@@ -31,7 +31,6 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
-    "@types/better-sqlite3": "^7.6.9",
     "@types/node": "^20.11.5",
     "@types/nodemailer": "^6.4.14",
     "@types/papaparse": "^5.3.14",
@@ -84,8 +83,6 @@
       "dist/**/*",
       "resources/**/*"
     ],
-    "asarUnpack": [
-      "node_modules/better-sqlite3/**/*"
-    ]
+    "asarUnpack": []
   }
 }

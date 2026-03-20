@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import type { Rule, Bucket } from '../../src/shared/types'
 import { createHash } from 'crypto'
 
@@ -102,9 +102,9 @@ export function ruleMatches(rule: Rule, tx: {
 
 // Cache personal trip dates to avoid querying DB on every conditional restaurant check
 let _tripDateCache: { start_date: string; end_date: string }[] | null = null
-let _tripDateCacheDb: Database.Database | null = null
+let _tripDateCacheDb: CompatDb | null = null
 
-function getPersonalTripDates(db: Database.Database): { start_date: string; end_date: string }[] {
+function getPersonalTripDates(db: CompatDb): { start_date: string; end_date: string }[] {
   if (_tripDateCache && _tripDateCacheDb === db) return _tripDateCache
   _tripDateCache = db.prepare('SELECT start_date, end_date FROM personal_trip_dates').all() as {
     start_date: string; end_date: string
@@ -119,7 +119,7 @@ export function invalidateTripDateCache(): void {
   _tripDateCacheDb = null
 }
 
-function isPersonalTripDate(db: Database.Database, date: string): boolean {
+function isPersonalTripDate(db: CompatDb, date: string): boolean {
   return getPersonalTripDates(db).some(t => date >= t.start_date && date <= t.end_date)
 }
 
@@ -132,7 +132,7 @@ export function classifyTransaction(
     category_source?: string
   },
   rules: Rule[],
-  db: Database.Database
+  db: CompatDb
 ): ClassifyResult {
   const merchantNorm = normalizeMerchant(tx.description_raw)
   const date = tx.transaction_date
@@ -204,12 +204,12 @@ export function classifyTransaction(
     flag_reason: null, action: 'default' }
 }
 
-export function loadActiveRules(db: Database.Database): Rule[] {
+export function loadActiveRules(db: CompatDb): Rule[] {
   return db.prepare('SELECT * FROM rules WHERE is_active = 1 ORDER BY priority_order ASC').all() as Rule[]
 }
 
 export function classifyAndSave(
-  db: Database.Database,
+  db: CompatDb,
   transactions: Array<{
     id: string
     description_raw: string
@@ -259,7 +259,7 @@ export function classifyAndSave(
 }
 
 function upsertVendor(
-  db: Database.Database,
+  db: CompatDb,
   rawName: string,
   canonicalName: string,
   ruleId: string | null
@@ -277,7 +277,7 @@ function upsertVendor(
   }
 }
 
-export function reclassifyPendingAfterRuleChange(db: Database.Database): { resolved: number } {
+export function reclassifyPendingAfterRuleChange(db: CompatDb): { resolved: number } {
   const pending = db.prepare(
     "SELECT t.*, a.account_mask FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE t.review_status = 'pending_review'"
   ).all() as Array<{ id: string; description_raw: string; amount: number; transaction_date: string; account_mask: string; category_source: string | null }>

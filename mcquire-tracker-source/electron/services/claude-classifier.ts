@@ -6,7 +6,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { safeStorage, app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-import type Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import { P10_CATEGORIES, LLC_CATEGORIES } from '../../src/shared/types'
 
 // ─── Credential storage (same pattern as Plaid) ─────────────────────────────
@@ -55,7 +55,7 @@ export interface ClassificationSuggestion {
 }
 
 /** Build a context string from recent manually-classified transactions */
-function buildHistoryContext(db: Database.Database, limit: number = 30): string {
+function buildHistoryContext(db: CompatDb, limit: number = 30): string {
   const recent = db.prepare(`
     SELECT merchant_name, amount, bucket, p10_category, llc_category, description_notes
     FROM transactions
@@ -89,7 +89,7 @@ export async function suggestClassification(
     category_source?: string | null
     flag_reason?: string | null
   },
-  db: Database.Database
+  db: CompatDb
 ): Promise<ClassificationSuggestion> {
   const apiKey = loadClaudeApiKey()
   if (!apiKey) {
@@ -174,7 +174,7 @@ export async function suggestBatch(
     category_source?: string | null
     flag_reason?: string | null
   }>,
-  db: Database.Database
+  db: CompatDb
 ): Promise<Record<string, ClassificationSuggestion>> {
   const results: Record<string, ClassificationSuggestion> = {}
 

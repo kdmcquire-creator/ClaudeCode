@@ -6,7 +6,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import * as path from 'path'
 import * as fs from 'fs'
-import Database from 'better-sqlite3'
+import type { CompatDb } from '../../electron/services/database'
 
 // ── Service imports ──────────────────────────────────────────────────────────
 import { PlaidService } from '../../electron/services/plaid.service'
@@ -31,7 +31,7 @@ app.setAsDefaultProtocolClient('mcquire-tracker')
 // App state
 // ─────────────────────────────────────────────────────────────────────────────
 let mainWindow: BrowserWindow | null = null
-let db: Database.Database | null = null
+let db: CompatDb | null = null
 let syncFolderPath: string = ''
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,13 +112,13 @@ let _servicesBootstrapped = false
 async function bootstrapServices(folder: string): Promise<void> {
   if (_servicesBootstrapped) {
     console.warn('[Main] Services already bootstrapped — reinitializing DB only')
-    db = initDatabase(folder)
+    db = await initDatabase(folder)
     return
   }
   _servicesBootstrapped = true
 
   initSyncFolderStructure(folder)
-  db = initDatabase(folder)
+  db = await initDatabase(folder)
 
   // ── Phase 2: Plaid sync ─────────────────────────────────────────────────
   const plaidService = PlaidService.getInstance(db)
@@ -177,7 +177,7 @@ async function bootstrapServices(folder: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Watched folder import — chokidar watches USAA + Apple Card folders
 // ─────────────────────────────────────────────────────────────────────────────
-function registerWatchedFolderHandlers(database: Database.Database, folder: string): void {
+function registerWatchedFolderHandlers(database: CompatDb, folder: string): void {
   try {
     const chokidar = require('chokidar')
 

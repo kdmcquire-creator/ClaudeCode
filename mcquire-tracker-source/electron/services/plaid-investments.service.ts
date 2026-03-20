@@ -16,7 +16,7 @@
 //   await invService.syncTransactions(plaidItemId, startDate, endDate)
 
 import { PlaidApi } from 'plaid'
-import Database from 'better-sqlite3'
+import type { CompatDb } from './database'
 import { v4 as uuidv4 } from 'uuid'
 import { PlaidService } from './plaid.service'
 import type {
@@ -29,16 +29,16 @@ import type {
 
 export class PlaidInvestmentsService {
   private static instance: PlaidInvestmentsService | null = null
-  private db: Database.Database
+  private db: CompatDb
   private plaid: PlaidService
 
-  private constructor(db: Database.Database, plaid: PlaidService) {
+  private constructor(db: CompatDb, plaid: PlaidService) {
     this.db = db
     this.plaid = plaid
   }
 
   static getInstance(
-    db: Database.Database,
+    db: CompatDb,
     plaid: PlaidService
   ): PlaidInvestmentsService {
     if (!PlaidInvestmentsService.instance) {
