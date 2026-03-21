@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('api', {
     getAll:       (filters?: Record<string, any>)             => ipcRenderer.invoke('transactions:get-all', filters),
     split:        (parentId: string, fragments: any[])        => ipcRenderer.invoke('transactions:split', parentId, fragments),
     runRulesAll:  ()                                          => ipcRenderer.invoke('transactions:run-rules-all'),
+    getRecentNotes: (filters?: { category?: string; merchant?: string }) => ipcRenderer.invoke('transactions:get-recent-notes', filters),
   },
 
   rules: {

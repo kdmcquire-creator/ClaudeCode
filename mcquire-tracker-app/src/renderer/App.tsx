@@ -42,6 +42,7 @@ export default function App() {
     } catch {}
 
     // Auto-refresh pending count after sync completes or import finishes
+    let interval: ReturnType<typeof setInterval> | undefined
     try {
       const ipc = (window as any).electron?.ipcRenderer
       const refreshCount = () => {
@@ -53,10 +54,9 @@ export default function App() {
       ipc?.on('event:sync-completed', refreshCount)
       ipc?.on('import:watched-folder-complete', refreshCount)
       // Also refresh periodically (every 30s) to catch changes from other screens
-      const interval = setInterval(refreshCount, 30000)
+      interval = setInterval(refreshCount, 30000)
       // Initial load
       refreshCount()
-      return () => clearInterval(interval)
     } catch {}
 
     // Fallback: check sync folder to determine first run
@@ -70,8 +70,11 @@ export default function App() {
       setIsReady(true)
     }
 
-    setTimeout(checkReady, 500)
-    return undefined
+    const timeout = setTimeout(checkReady, 500)
+    return () => {
+      if (interval) clearInterval(interval)
+      clearTimeout(timeout)
+    }
   }, [])
 
   if (!isReady) {
@@ -138,6 +141,7 @@ declare global {
         getAll: (filters?: Record<string, any>) => Promise<any>
         split: (parentId: string, fragments: any[]) => Promise<any>
         runRulesAll: () => Promise<any>
+        getRecentNotes: (filters?: { category?: string; merchant?: string }) => Promise<any>
       }
       rules: {
         getAll: () => Promise<any>
