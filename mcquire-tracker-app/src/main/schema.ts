@@ -3,7 +3,9 @@
 
 import * as path from 'path'
 import * as fs from 'fs'
+import { createHash } from 'crypto'
 import { initSqlJsDatabase, type CompatDb } from '../../electron/services/database'
+import { normalizeMerchant } from '../../electron/services/classification-engine'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Database initialization
@@ -336,7 +338,6 @@ function runMigrations(database: CompatDb): void {
     `).all() as Array<{ id: string; transaction_date: string; amount: number; merchant_name: string; account_mask: string }>
 
     if (txsWithoutHash.length > 0) {
-      const { createHash } = require('crypto')
       const updateHash = database.prepare('UPDATE transactions SET source_row_hash = ? WHERE id = ?')
       const run = database.transaction(() => {
         for (const tx of txsWithoutHash) {
@@ -367,8 +368,7 @@ function runMigrations(database: CompatDb): void {
   // This fixes the DoorDash (and similar) duplicate bug where CSV and Plaid
   // produced different hashes for the same transaction.
   if (!applied('007-csv-rehash-dedup')) {
-    const { createHash } = require('crypto')
-    const { normalizeMerchant: normMerch } = require('../electron/services/classification-engine')
+    const normMerch = normalizeMerchant
 
     // Find all CSV-imported transactions (have source_row_hash, no plaid_transaction_id)
     const csvTxs = database.prepare(`

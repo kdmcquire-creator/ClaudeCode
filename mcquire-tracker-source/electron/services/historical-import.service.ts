@@ -15,7 +15,7 @@ import * as crypto from 'crypto'
 import type { CompatDb } from './database'
 import { v4 as uuidv4 } from 'uuid'
 import { ipcMain, dialog } from 'electron'
-import { normalizeMerchant, hashRow } from './classification-engine'
+import { normalizeMerchant, hashRow, classifyTransaction, loadActiveRules } from './classification-engine'
 
 // ─── Monarch CSV column mapping ───────────────────────────────────────────────
 // Monarch export columns: Date, Merchant, Category, Account, Original Statement,
@@ -305,7 +305,7 @@ export class HistoricalImportService {
 
         // Run classification engine
         try {
-          const { classifyTransaction, loadActiveRules } = require('./classification-engine')
+          // classifyTransaction and loadActiveRules imported at top of file
           const rules = loadActiveRules(this.db)
           const result = classifyTransaction(rawTx, rules, this.db)
           Object.assign(rawTx, result)
