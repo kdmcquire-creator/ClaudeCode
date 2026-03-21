@@ -178,6 +178,68 @@ export function registerAppIpcHandlers(state: AppState): void {
     return { success: true }
   })
 
+  // ── Notes history (for review queue suggestions) ──────────────────────────
+
+  ipcMain.handle('transactions:get-recent-notes', (_event: Electron.IpcMainInvokeEvent, filters?: { category?: string; merchant?: string }) => {
+    const db = getDb()
+    if (!db) return { success: true, data: [] }
+    try {
+      const results: Array<{ note: string; use_count: number; last_used: string }> = []
+
+      // Notes for the specific category (most relevant)
+      if (filters?.category) {
+        const catRows = db.prepare(`
+          SELECT description_notes as note, COUNT(*) as use_count, MAX(updated_at) as last_used
+          FROM transactions
+          WHERE description_notes IS NOT NULL AND description_notes != ''
+            AND review_status = 'manually_classified'
+            AND (p10_category = ? OR llc_category = ?)
+          GROUP BY description_notes
+          ORDER BY use_count DESC, last_used DESC
+          LIMIT 15
+        `).all(filters.category, filters.category) as typeof results
+        results.push(...catRows)
+      }
+
+      // Notes for this merchant (also relevant)
+      if (filters?.merchant) {
+        const merchRows = db.prepare(`
+          SELECT description_notes as note, COUNT(*) as use_count, MAX(updated_at) as last_used
+          FROM transactions
+          WHERE description_notes IS NOT NULL AND description_notes != ''
+            AND review_status = 'manually_classified'
+            AND merchant_name LIKE ?
+          GROUP BY description_notes
+          ORDER BY use_count DESC, last_used DESC
+          LIMIT 10
+        `).all(`%${filters.merchant}%`) as typeof results
+        for (const r of merchRows) {
+          if (!results.some(x => x.note === r.note)) results.push(r)
+        }
+      }
+
+      // If we still have few results, add globally popular notes
+      if (results.length < 5) {
+        const globalRows = db.prepare(`
+          SELECT description_notes as note, COUNT(*) as use_count, MAX(updated_at) as last_used
+          FROM transactions
+          WHERE description_notes IS NOT NULL AND description_notes != ''
+            AND review_status = 'manually_classified'
+          GROUP BY description_notes
+          ORDER BY use_count DESC, last_used DESC
+          LIMIT 10
+        `).all() as typeof results
+        for (const r of globalRows) {
+          if (!results.some(x => x.note === r.note)) results.push(r)
+        }
+      }
+
+      return { success: true, data: results }
+    } catch (err: any) {
+      return { success: false, error: err.message, data: [] }
+    }
+  })
+
   // ── Rule CRUD ──────────────────────────────────────────────────────────────
 
   ipcMain.handle('rules:get-all', () => {
