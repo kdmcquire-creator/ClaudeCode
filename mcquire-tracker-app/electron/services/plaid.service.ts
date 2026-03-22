@@ -476,7 +476,7 @@ export class PlaidService {
       // but mark it as Exclude so it doesn't appear in reports or review queue.
       this.db
         .prepare(
-          `INSERT INTO transactions
+          `INSERT OR IGNORE INTO transactions
             (id, account_id, plaid_transaction_id, source_row_hash, transaction_date,
              description_raw, merchant_name, amount, category_source, bucket,
              review_status, flag_reason, is_split_child, created_at, updated_at)
@@ -529,7 +529,7 @@ export class PlaidService {
 
     this.db
       .prepare(
-        `INSERT INTO transactions
+        `INSERT OR IGNORE INTO transactions
           (id, account_id, plaid_transaction_id, source_row_hash, transaction_date, posting_date,
            description_raw, merchant_name, amount, category_source, bucket, p10_category,
            llc_category, description_notes, rule_id, review_status, flag_reason, split_parent_id,

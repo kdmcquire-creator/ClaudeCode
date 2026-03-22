@@ -278,6 +278,41 @@ export class HistoricalImportService {
           continue
         }
 
+        // Cross-account dedup: same merchant + amount + date on a different account
+        // means this charge already exists (e.g., DoorDash appearing on two cards).
+        const merchantNorm = normalizeMerchant(
+          row['Merchant'] || row['Original Statement'] || row['Description'] || ''
+        )
+        const txDate = this.normalizeDate(row[dateCol] || '')
+        const txAmount = this.parseAmount(row[amountCol] || '0')
+        const crossAcct = this.db
+          .prepare(
+            `SELECT COUNT(*) as n FROM transactions
+             WHERE account_id != ?
+               AND merchant_name = ?
+               AND amount = ?
+               AND transaction_date = ?
+               AND bucket != 'Exclude'`
+          )
+          .get(accountId, merchantNorm, txAmount, txDate) as { n: number }
+        if (crossAcct.n === 1) {
+          // Insert as Exclude so the hash is recorded and we don't re-process
+          this.db.prepare(
+            `INSERT OR IGNORE INTO transactions
+              (id, account_id, source_row_hash, transaction_date,
+               description_raw, merchant_name, amount, category_source, bucket,
+               review_status, flag_reason, is_split_child, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Exclude', 'auto_classified',
+                     'Cross-account duplicate', 0, datetime('now'), datetime('now'))`
+          ).run(
+            uuidv4(), accountId, hash, txDate,
+            row['Original Statement'] || row['Merchant'] || row['Description'] || '',
+            merchantNorm, txAmount, row['Category'] || null
+          )
+          progress.duplicates++
+          continue
+        }
+
         const amount = this.parseAmount(row[amountCol] || '0')
         const merchantName = this.cleanMerchant(
           row['Merchant'] || row['Original Statement'] || row['Description'] || ''
