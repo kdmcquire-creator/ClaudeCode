@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meeting Prep Brief — Skill System Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0D1117;
+    --surface: #161B22;
+    --border: #30363D;
+    --text: #C9D1D9;
+    --text-dim: #8B949E;
+    --accent: #58A6FF;
+    --green: #3FB950;
+    --yellow: #D29922;
+    --red: #F85149;
+    --purple: #BC8CFF;
+    --orange: #D18616;
+    --navy: #1B2A4A;
+    --gold: #C9A84C;
+    --forest: #1A3A2A;
+    --sage: #8BAA7F;
+    --charcoal: #2A2A2A;
+    --steel: #4A7FB5;
+    --copper: #B87333;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    line-height: 1.6;
+    padding: 2rem 1rem;
+  }
+
+  .container { max-width: 960px; margin: 0 auto; }
+
+  .masthead {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+  .masthead h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #F0F6FC;
+    margin-bottom: 0.3rem;
+  }
+  .masthead .sub {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .section-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Workflow Map */
+  .workflow-map {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin-bottom: 2.5rem;
+    overflow-x: auto;
+  }
+  .phase-card {
+    flex: 1;
+    min-width: 180px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    position: relative;
+  }
+  .phase-card:not(:last-child)::after {
+    content: '→';
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    font-size: 1.2rem;
+    font-weight: 700;
+    z-index: 1;
+  }
+  .phase-card:not(:last-child) { margin-right: 24px; }
+  .phase-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .phase-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #F0F6FC;
+    margin: 0.2rem 0 0.5rem;
+  }
+  .phase-io {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .phase-io .out { color: var(--green); }
+  .phase-io .check { color: var(--yellow); }
+
+  /* Phase Detail Blocks */
+  .phase-detail {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  .phase-detail h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #F0F6FC;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .phase-detail h3 .badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .badge-intake { background: var(--purple); color: #000; }
+  .badge-research { background: var(--accent); color: #000; }
+  .badge-synthesis { background: var(--orange); color: #000; }
+  .badge-format { background: var(--green); color: #000; }
+
+  .phase-detail p {
+    font-size: 0.82rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+  .phase-detail .code-block {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.6rem 0.8rem;
+    color: var(--text-dim);
+    overflow-x: auto;
+    margin-top: 0.5rem;
+    white-space: pre;
+  }
+
+  /* Handoff blocks */
+  .handoff {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.8rem;
+    background: rgba(88, 166, 255, 0.06);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+    margin: 0.8rem 0;
+    font-size: 0.78rem;
+  }
+  .handoff-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+
+  /* Checkpoint blocks */
+  .checkpoint {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.5rem 0.8rem;
+    background: rgba(210, 153, 34, 0.06);
+    border-left: 3px solid var(--yellow);
+    border-radius: 0 4px 4px 0;
+    margin: 0.8rem 0;
+    font-size: 0.78rem;
+  }
+  .checkpoint-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    color: var(--yellow);
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+
+  /* Test Results */
+  .test-grid { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem; }
+  .test-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .test-status {
+    font-size: 1.4rem;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .test-body h4 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #F0F6FC;
+    margin-bottom: 0.25rem;
+  }
+  .test-body .type-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .type-deal { background: var(--navy); color: var(--gold); }
+  .type-hiring { background: var(--forest); color: var(--sage); }
+  .type-investor { background: var(--charcoal); color: var(--steel); border: 1px solid #444; }
+
+  .test-body p { font-size: 0.78rem; color: var(--text-dim); }
+  .test-body .metrics {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 0.3rem;
+  }
+  .test-body .metrics span { margin-right: 1rem; }
+  .test-body .metrics .val { color: var(--green); }
+
+  /* File tree */
+  .file-tree {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    line-height: 1.8;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 2rem;
+  }
+  .file-tree .dir { color: var(--accent); }
+  .file-tree .file { color: var(--text); }
+  .file-tree .desc { color: var(--text-dim); font-style: italic; }
+
+  /* Usage */
+  .usage-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  .usage-block h4 {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #F0F6FC;
+    margin-bottom: 0.5rem;
+  }
+  .usage-example {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.6rem 0.8rem;
+    color: var(--green);
+    margin-top: 0.4rem;
+  }
+
+  .footer {
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    margin-top: 2rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="masthead">
+    <h1>Meeting Prep Brief — Skill System</h1>
+    <div class="sub">4-phase pipeline · PDF output · 6 meeting types · checkpoint-validated</div>
+  </div>
+
+  <!-- WORKFLOW MAP -->
+  <div class="section-title">Workflow Map</div>
+  <div class="workflow-map">
+    <div class="phase-card">
+      <div class="phase-num">Phase 1</div>
+      <div class="phase-name">Intake</div>
+      <div class="phase-io">
+        in: raw user text<br>
+        <span class="out">out: research_plan.json</span><br>
+        <span class="check">✓ ≥6 queries, type classified</span>
+      </div>
+    </div>
+    <div class="phase-card">
+      <div class="phase-num">Phase 2</div>
+      <div class="phase-name">Research</div>
+      <div class="phase-io">
+        in: research_plan.json<br>
+        <span class="out">out: raw_intel.json</span><br>
+        <span class="check">✓ medium+ confidence</span>
+      </div>
+    </div>
+    <div class="phase-card">
+      <div class="phase-num">Phase 3</div>
+      <div class="phase-name">Synthesis</div>
+      <div class="phase-io">
+        in: raw_intel + plan<br>
+        <span class="out">out: brief_content.json</span><br>
+        <span class="check">✓ 7/7 sections filled</span>
+      </div>
+    </div>
+    <div class="phase-card">
+      <div class="phase-num">Phase 4</div>
+      <div class="phase-name">Format</div>
+      <div class="phase-io">
+        in: brief_content.json<br>
+        <span class="out">out: name-brief.pdf</span><br>
+        <span class="check">✓ 1 page, valid PDF</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE DETAILS -->
+  <div class="section-title">Phase Skills</div>
+
+  <div class="phase-detail">
+    <h3><span class="badge badge-intake">PHASE 1</span> Intake</h3>
+    <p>Parses raw user input into a structured research plan. Extracts name, company, meeting type, relationship status, and known facts. Generates 6-10 targeted search queries optimized by meeting context. Classifies across 6 types: deal, hiring, investor, networking, board, general.</p>
+    <div class="checkpoint">
+      <span class="checkpoint-label">CHECKPOINT</span>
+      <span>≥6 search queries · meeting_type classified · full name present (if only first name → ask ONE question)</span>
+    </div>
+    <div class="handoff">
+      <span class="handoff-label">HANDOFF →</span>
+      <span>research_plan object with subject_name, current_company, meeting_type, relationship_status, known_facts[], search_queries[], priority_signals[]</span>
+    </div>
+  </div>
+
+  <div class="phase-detail">
+    <h3><span class="badge badge-research">PHASE 2</span> Research</h3>
+    <p>Executes search queries in 3 batches (identity → career depth → context enrichment). Fetches key pages. Cross-references every fact with verification tiers: confirmed, likely, or unconfirmed. Time-boxed to 8-12 tool calls. Identifies shared ground with Kyle's profile (Peak 10, Austin/Houston, PE-backed E&P).</p>
+    <div class="checkpoint">
+      <span class="checkpoint-label">CHECKPOINT</span>
+      <span>current role + ≥1 prior role confirmed · confidence ≥ medium · if low → 3 additional searches, then flag gaps</span>
+    </div>
+    <div class="handoff">
+      <span class="handoff-label">HANDOFF →</span>
+      <span>raw_intel object with bio_facts, current_role, career_arc[], public_content[], company_context, shared_connections[], source_urls[], confidence_score, gaps[]</span>
+    </div>
+  </div>
+
+  <div class="phase-detail">
+    <h3><span class="badge badge-synthesis">PHASE 3</span> Synthesis</h3>
+    <p>Transforms raw intel into 7 editorial sections. Writes a career arc narrative (not a resume dump). Generates conversation topics prioritized by meeting type. Creates calibrated openers by relationship status. Produces tactical notes specific to the meeting's strategic purpose. Target: 400-600 total words.</p>
+    <div class="checkpoint">
+      <span class="checkpoint-label">CHECKPOINT</span>
+      <span>7/7 sections populated · ≥4 conversation topics · ≥3 openers · ≥2 avoid items · no fabricated facts · 400-600 word count</span>
+    </div>
+    <div class="handoff">
+      <span class="handoff-label">HANDOFF →</span>
+      <span>brief_content object with header, career_arc, snapshot, conversation_topics[], openers[], tactical_notes, avoid[]</span>
+    </div>
+  </div>
+
+  <div class="phase-detail">
+    <h3><span class="badge badge-format">PHASE 4</span> Format</h3>
+    <p>Renders brief_content into a single-page PDF using reportlab. Layout: dark header band → career arc → two-column body (snapshot + openers | conversation topics) → bottom strip (tactical notes + avoid). Color palette driven by meeting type. Overflow handling: trim topics → trim openers → tighten notes → reduce font.</p>
+    <div class="checkpoint">
+      <span class="checkpoint-label">CHECKPOINT</span>
+      <span>PDF exists · ≥1 page · ≤2 pages · file size 10KB-5MB · pypdf validation pass</span>
+    </div>
+  </div>
+
+  <!-- TEST RESULTS -->
+  <div class="section-title">End-to-End Test Results</div>
+  <div class="test-grid">
+
+    <div class="test-card">
+      <div class="test-status">✅</div>
+      <div class="test-body">
+        <h4><span class="type-badge type-deal">DEAL</span> Tom Ward · Mach Natural Resources</h4>
+        <p>Input: "Meeting with Tom Ward at Mach Natural Resources. They've been acquiring PDP assets in the Anadarko Basin. Deal dinner."</p>
+        <p>Full pipeline executed. Research found: Chesapeake co-founder history, SandRidge ouster, Mach's NYSE listing, distribution-focused model. Synthesis calibrated topics to shared PDP acquisition strategy. PDF rendered in deal palette (navy/gold).</p>
+        <div class="metrics">
+          <span>searches: <span class="val">3</span></span>
+          <span>confidence: <span class="val">high</span></span>
+          <span>pages: <span class="val">1</span></span>
+          <span>size: <span class="val">4,337 B</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-status">✅</div>
+      <div class="test-body">
+        <h4><span class="type-badge type-hiring">HIRE</span> Sarah Baxter · Crestview Partners (fictional)</h4>
+        <p>Input: "Interviewing Sarah Baxter, she's at Crestview Partners. VP Finance candidate. Came from Diversified Energy before that."</p>
+        <p>Phase 2 checkpoint correctly caught low confidence — person not found in any source. System flagged gap and proceeded with user-provided context only. Sources footnote explicitly notes unverified status. PDF rendered in hiring palette (forest/sage).</p>
+        <div class="metrics">
+          <span>searches: <span class="val">1</span></span>
+          <span>confidence: <span class="val">low ⚠️</span></span>
+          <span>pages: <span class="val">1</span></span>
+          <span>size: <span class="val">4,739 B</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-card">
+      <div class="test-status">✅</div>
+      <div class="test-body">
+        <h4><span class="type-badge type-investor">INVESTOR</span> David Albin · NGP Energy Capital</h4>
+        <p>Input: "Having coffee with David Albin from NGP. He's been in energy PE forever. Exploring whether NGP could be a future capital partner."</p>
+        <p>Full pipeline executed. Research found: NGP co-founder (1988), Goldman/Bass family background, Stanford physics, Carlyle affiliation, transition to advisory role + family office. Tactical notes correctly calibrated to advisory status — "don't pitch directly." PDF rendered in investor palette (charcoal/blue).</p>
+        <div class="metrics">
+          <span>searches: <span class="val">2</span></span>
+          <span>confidence: <span class="val">high</span></span>
+          <span>pages: <span class="val">1</span></span>
+          <span>size: <span class="val">4,382 B</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILE TREE -->
+  <div class="section-title">Skill Package Structure</div>
+  <div class="file-tree">
+<span class="dir">meeting-prep-skill/</span>
+├── <span class="file">SKILL.md</span>                          <span class="desc">— orchestrator: architecture, phase routing, error handling</span>
+├── <span class="dir">references/</span>
+│   ├── <span class="file">phase1-intake.md</span>               <span class="desc">— input parsing, type classification, query generation</span>
+│   ├── <span class="file">phase2-research.md</span>             <span class="desc">— search execution, verification tiers, shared ground</span>
+│   ├── <span class="file">phase3-synthesis.md</span>            <span class="desc">— editorial writing, section generation, word budget</span>
+│   └── <span class="file">phase4-format.md</span>              <span class="desc">— PDF layout spec, color palettes, overflow handling</span>
+├── <span class="dir">scripts/</span>
+│   └── <span class="file">generate_brief.py</span>             <span class="desc">— reportlab PDF generator (accepts JSON, outputs PDF)</span>
+└── <span class="dir">assets/</span>                            <span class="desc">— (reserved for custom fonts/logos)</span>
+  </div>
+
+  <!-- USAGE -->
+  <div class="section-title">How To Use</div>
+  <div class="usage-block">
+    <h4>Minimal input (most common)</h4>
+    <div class="usage-example">"Prep me for dinner with Tom Ward at Mach Natural Resources. Deal meeting."</div>
+  </div>
+  <div class="usage-block">
+    <h4>With breadcrumbs</h4>
+    <div class="usage-example">"Meeting with David Albin from NGP. He co-founded NGP in 1988, came from Goldman and the Bass family. Coffee to explore capital partnership."</div>
+  </div>
+  <div class="usage-block">
+    <h4>Hiring context</h4>
+    <div class="usage-example">"Interviewing Sarah Baxter for VP Finance. She's at Crestview Partners, was at Diversified Energy before that."</div>
+  </div>
+
+  <div class="footer">
+    meeting-prep-brief v1.0 · March 2026 · Peak 10 Energy
+  </div>
+
+</div>
+</body>
+</html>
