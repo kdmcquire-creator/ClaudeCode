@@ -29,10 +29,15 @@ CANDIDATES   (generate-and-filter / tournament)
   [tournament bracket, if P5 ran: C1 def. C3 on D4; C1 def. C2 on D1]
 ──────────────────────────────────────────────────────────────
 VERIFICATION (adversarial, P3)
+  artifact identity:  <exact path @ commit — same one that ships>
   independence_mode:  <FRESH|FIREWALLED|INLINE>     ← worth-of-checkmark
   fabrication sweep:  N claims | verified A / flagged B / asserted C / wrong D
                       [list any asserted/wrong — these forced revision]
-  findings:           <each finding → rubric dim → what changed>
+  VERIFIER VERDICTS (verbatim — not summarized):
+    <paste each verifier's returned object, e.g.
+     DS-audit: { clean:false, violations:[{file,line,rule,fix}, ...], score_D3:2 }
+     accuracy: { d1:4, d2:4, fabrication:[], failures:[] } >
+  findings→action:    <each finding → fixed in round N | exited STUCK>
   confidence note:    <none | "low-confidence PASS — verifier found little">
 ──────────────────────────────────────────────────────────────
 ITERATION (loop-until-done, P6)

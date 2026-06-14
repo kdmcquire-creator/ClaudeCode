@@ -20,6 +20,14 @@ drive the selection table below and are **logged as line 1 of the provenance tra
 > Misclassification is high-leverage, so the classification is the first thing the
 > provenance trail shows for a 5-second human gut-check.
 
+> **Input-basis blocker (added v1.1):** before the gate, the classifier must resolve
+> *what the deliverable is computed from.* If two or more candidate sources-of-truth
+> exist (e.g. a live data feed vs. a static spreadsheet vs. a stale vintage) AND the
+> output changes materially depending which is authoritative, that is a **pre-gate
+> blocker** — a question to ask at the approval gate, NOT a discovery to make mid-build.
+> Building on an unconfirmed basis and surfacing the conflict after code exists is the
+> exact late-rework failure this rule prevents. Surface it first.
+
 ---
 
 ## The six patterns

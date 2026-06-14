@@ -7,6 +7,41 @@
 
 ---
 
+## Verdict supremacy (the rule that was missing — added v1.1)
+A verifier's returned score is **authoritative and final for that dimension.** The
+orchestrator's only legal responses to a returned defect are: **(a) fix it and
+re-verify**, or **(b) exit STUCK.** The orchestrator may NOT:
+- soften, reinterpret, or re-grade a verdict ("this `clean:false` is really fine");
+- reclassify a failing finding as beneath the bar's notice. The words **"cosmetic,"
+  "finish-carpentry," "doesn't touch correctness," "only conformance," "minor"** are
+  **forbidden moves** when applied to a sub-threshold dimension. The rubric already
+  states any dimension < 3 fails *regardless of other strengths*; the orchestrator is
+  barred from arguing with that.
+- decide for the user that a violation is trivial. The user judges triviality from the
+  **verbatim findings**, not from the orchestrator's pre-digested summary.
+
+> This rule exists because a real session shipped a `clean:false` Design-System verdict
+> after the orchestrator relabeled the violations "cosmetic finish-carpentry." That is
+> the canonical false-PASS. Verdict supremacy makes it structurally illegal.
+
+## Blocking verification (added v1.1)
+Verification is **not complete when launched — only when its verdict is read.** A
+verifier that was dispatched but whose returned object is **not physically present in
+the orchestrator's context counts as FAIL**, never PASS. If the runtime uses async /
+background agents with output files, the orchestrator MUST ingest the returned
+`{clean, violations, score}` object (poll/read the result) before it may attest
+anything about that dimension. "I launched the checker" ≠ "the checker passed."
+
+## Artifact identity (added v1.1)
+Before generation, the orchestrator **pins the artifact under verification** to one
+immutable identity: exact path (and commit hash where applicable). **Every verifier and
+the final ship/deploy must operate on that same identity**, recorded in the trail. A
+verdict that audited a different path/commit than what ships is **void** → treat as
+unverified → FAIL. (Real session drifted between `peak10-hedge-restructure` and a
+`dashboard-template` tree; a clean verdict on one tells you nothing about the other.)
+
+---
+
 ## Principle: the gradee never grades itself
 The instance that generated an artifact has an anchoring bias toward it (it "knows
 what it meant"). So verification and judging are done by a **separated role** that
@@ -42,6 +77,15 @@ When a true fresh invocation isn't used, the verifier turn must:
    laundering its own preferences into the output.
 
 ---
+
+## Conformance grading against the law file (added v1.1)
+When a deliverable has an authoritative standards file (Design-System doc, house
+template, brand spec), the D3 verifier **diffs the artifact against that file directly**
+— the standard is NOT retyped into the verifier prompt (retyping drifts and lets the
+checklist quietly shrink). "Conformant" = "matches the law file," not "matches what was
+remembered this round." The returned `violations` array is **pasted verbatim into the
+provenance trail**; the orchestrator may add context but may not replace the raw
+findings with its own severity summary.
 
 ## The adversarial stance (P3)
 The verifier's explicit objective is to **lower unjustified scores**, not confirm them.

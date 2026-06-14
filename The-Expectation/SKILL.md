@@ -32,6 +32,10 @@ honest STUCK). Always emit the provenance trail with the deliverable.
 Read the task. Tag it on the four axes (answer-shape / checkability / stakes / surface).
 Honor `insight_n/a` ONLY if `single-correct` AND `mechanical-transform`; any doubt →
 D4 stays live. This classification is line 1 of the provenance trail.
+**Input-basis check (v1.1):** resolve *what the deliverable is computed from* now. If
+two+ candidate sources-of-truth exist and the output changes materially by which one is
+authoritative, that is a **pre-gate blocker** — raise it at Step 3, do not discover it
+mid-build.
 
 ### Step 1 — Set tier
 - Default **Standard** unless the user said cheap/maximum or stakes dictate.
@@ -41,6 +45,9 @@ D4 stays live. This classification is line 1 of the provenance trail.
 ### Step 2 — Select plan (consult patterns.md decision table)
 Pick the pattern stack. You may deviate from the table **only by adding rigor, never
 by removing P3.** Record the stack and any deviation+reason for the trail.
+**Pin artifact identity (v1.1):** name the exact path (and commit, where applicable)
+that will be generated, verified, and shipped — one immutable identity. Every verifier
+and the final ship/deploy must operate on it. Record it in the trail.
 
 ### Step 3 — THE APPROVAL GATE (single, by default)
 Present, compactly:
@@ -64,7 +71,12 @@ or multi-candidate (P4/P5). Mechanical-transform tasks: produce the exact transf
 ### Step 5 — Verify (P3, mandatory, every tier)
 Run adversarial verification per verification.md: separated role, firewalled or fresh,
 fabrication sweep first, score every dimension with cited evidence. Set independence
-mode by tier/stakes and **log it.**
+mode by tier/stakes and **log it.** Verification is complete only when each verifier's
+returned `{clean, violations, score}` object is **read into context** — a launched-but-
+unread verifier is FAIL (invariant 8). Verifiers and the eventual ship must operate on
+the **same pinned artifact identity** set at Step 2 (invariant 9). For any dimension
+with an authoritative standards file (Design-System, template, brand spec), the verifier
+diffs against that file and its `violations` are carried **verbatim** to the trail.
 
 ### Step 6 — Filter / tournament (if multiple candidates)
 Judge → rank → drop sub-threshold with cited reasons (P4); bracket if P5. Survivor proceeds.
@@ -118,6 +130,18 @@ which dimension, why, and what input/access/decision from Kyle would unblock it.
 4. A FAIL never ships as a downgraded PASS — it escalates or exits STUCK.
 5. The provenance trail is always emitted and always records the independence mode.
 6. STUCK with honest unresolved-list outranks a confident false PASS.
+7. **Verdict supremacy (v1.1):** the orchestrator may not soften, reinterpret, or
+   re-grade a verifier's score. A returned defect (e.g. `clean:false`, any dim < 3) is
+   a FAIL; the only legal responses are fix-and-re-verify or STUCK. The words
+   "cosmetic," "finish-carpentry," "doesn't touch correctness," "minor," "only
+   conformance" are forbidden when applied to a sub-threshold dimension.
+8. **Blocking verification (v1.1):** a verifier that was launched but whose verdict is
+   not physically in context = FAIL, not PASS. Read the returned object before attesting.
+9. **Artifact identity (v1.1):** the path/commit verified must be the path/commit that
+   ships. A verdict on a different artifact is void → FAIL.
+10. **Verbatim findings (v1.1):** the user judges triviality of a violation from the
+    raw findings, which are pasted into the trail. The orchestrator does not pre-digest
+    a verdict into "it's fine."
 
 ## Reusability
 Other skills (e.g., meeting-prep) may invoke this engine by reading the four
